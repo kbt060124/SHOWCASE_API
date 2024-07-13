@@ -8,4 +8,14 @@ use Illuminate\Database\Eloquent\Model;
 class Type extends Model
 {
     use HasFactory;
+
+    public function warehouses()
+    {
+        return $this->hasMany(Warehouse::class);
+    }
+
+    public function mp_objects()
+    {
+        return $this->hasMany(Mp_object::class);
+    }
 }

@@ -13,6 +13,14 @@ return new class extends Migration
     {
         Schema::create('mp_objects', function (Blueprint $table) {
             $table->id();
+            $table->string('name');
+            $table->integer('price');
+            $table->foreignId('bucket_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('category_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('type_id')->constrained()->cascadeOnDelete();
+            $table->string('detail');
+            $table->string('thumbnail');
+            $table->integer('valid_flg');
             $table->timestamps();
         });
     }

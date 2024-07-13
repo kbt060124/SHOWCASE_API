@@ -13,6 +13,8 @@ return new class extends Migration
     {
         Schema::create('shelves', function (Blueprint $table) {
             $table->id();
+            $table->integer('row_num');
+            $table->integer('col_num');
             $table->timestamps();
         });
     }
