@@ -1,11 +1,12 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api;
 
-use App\Models\Room;
+use App\Http\Controllers\Controller;
+use App\Models\Shelf;
 use Illuminate\Http\Request;
 
-class RoomController extends Controller
+class ShelfController extends Controller
 {
     /**
      * Display a listing of the resource.
@@ -34,7 +35,7 @@ class RoomController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Room $room)
+    public function show(Shelf $shelf)
     {
         //
     }
@@ -42,7 +43,7 @@ class RoomController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(Room $room)
+    public function edit(Shelf $shelf)
     {
         //
     }
@@ -50,7 +51,7 @@ class RoomController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Room $room)
+    public function update(Request $request, Shelf $shelf)
     {
         //
     }
@@ -58,7 +59,7 @@ class RoomController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Room $room)
+    public function destroy(Shelf $shelf)
     {
         //
     }
