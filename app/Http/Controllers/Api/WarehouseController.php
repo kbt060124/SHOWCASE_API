@@ -32,42 +32,50 @@ class WarehouseController extends Controller
      */
     public function store(Request $request)
     {
-            Log::info('Upload request received');
-            Log::info('Request headers', ['headers' => $request->headers->all()]);
-            Log::info('Request all', ['request' => $request->all()]);
-            Log::info('Request files', ['files' => $request->file()]);
+        Log::info('Upload request received');
+        Log::info('Request headers', ['headers' => $request->headers->all()]);
+        Log::info('Request all', ['request' => $request->all()]);
+        Log::info('Request files', ['files' => $request->file()]);
 
         if ($request->hasFile('file')) {
+            try {
                 $file = $request->file('file');
                 $extension = $file->getClientOriginalExtension();
-            Log::info('File received', [
-                'file_name' => $file->getClientOriginalName(),
-                'file_size' => $file->getSize(),
-                'mime_type' => $file->getMimeType(),
-                'extension' => $extension
-            ]);
+                Log::info('File received', [
+                    'file_name' => $file->getClientOriginalName(),
+                    'file_size' => $file->getSize(),
+                    'mime_type' => $file->getMimeType(),
+                    'extension' => $extension
+                ]);
 
-                      // 一意のファイル名を生成
-            $uniqueFileName = Str::uuid() . '.' . $extension;
+                // 一意のファイル名を生成
+                $uniqueFileName = Str::uuid() . '.' . $extension;
 
-            // ファイルの内容を取得
-            $fileContents = file_get_contents($file->getRealPath());
+                // ファイルの内容を取得
+                $fileContents = file_get_contents($file->getRealPath());
 
-            // S3にファイルをアップロード
-            $path = 'uploads/' . $uniqueFileName;
-            $fileContents = file_get_contents($file->getRealPath());
+                // S3にファイルをアップロード
+                $path = 'uploads/' . $uniqueFileName;
+                $result = Storage::disk('s3')->put($path, $fileContents, [
+                    'ContentType' => 'model/vnd.fbx'
+                ]);
 
-            Storage::disk('s3')->put($path, $fileContents, [
-                'ContentType' => 'model/vnd.fbx'
-            ]);
+                if (!$result) {
+                    throw new \Exception('S3へのアップロードに失敗しました');
+                }
 
-            // S3のURLを取得
-            $url = Storage::disk('s3')->url($path);
+                // S3のURLを取得
+                $url = Storage::disk('s3')->url($path);
 
-            return response()->json(['url' => $url], 200);
+                Log::info('File uploaded successfully', ['url' => $url]);
+                return response()->json(['url' => $url], 200);
+            } catch (\Exception $e) {
+                Log::error('File upload failed', ['error' => $e->getMessage()]);
+                return response()->json(['error' => 'ファイルのアップロードに失敗しました'], 500);
+            }
         }
 
-        Log::error('No file found in the request'); // ファイルが見つからない場合のログ
+        Log::error('No file found in the request');
         return response()->json(['error' => 'ファイルが見つかりません'], 400);
     }
 
