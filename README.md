@@ -64,3 +64,55 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+## 環境構築
+1. ターミナルを開き、プロジェクトをクローンするディレクトリに移動し、次のコマンドを打つ
+```bash
+git clone https://github.com/kbt060124/SHOWCASE_API.git
+```
+2. プロジェクト直下に移動し、次のコマンドを打つ
+```bash
+docker run --rm \
+    -u "$(id -u):$(id -g)" \
+    -v $(pwd):/var/www/html \
+    -w /var/www/html \
+    laravelsail/php82-composer:latest \
+    composer install --ignore-platform-reqs 
+```
+3. .envファイルにあるDB関連の下記の5つの値をローカルのものに変更する
+    - DB_HOST=mysql
+    - DB_PORT=3306
+    - DB_DATABASE=showcase
+    - DB_USERNAME=sail
+    - DB_PASSWORD=password
+
+4. 
+```bash
+./vendor/bin/sail build --no-cache
+```
+5. 
+```bash
+./vendor/bin/sail up -d
+```
+6. 
+```bash
+./vendor/bin/sail php artisan key:generate
+```
+7. 
+```bash
+./vendor/bin/sail php artisan migrate
+```
+
+8. （オプション）sailコマンドのAlias作成 @プロジェクト直下
+```bash
+vi ~/.zshrc
+```
+```bash
+alias sail="./vendor/bin/sail"
+```
+```bash
+% source ~/.zshrc
+```
+```bash
+sail up
+```
