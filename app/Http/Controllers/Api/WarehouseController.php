@@ -32,49 +32,119 @@ class WarehouseController extends Controller
      */
     public function store(Request $request)
     {
+        // dd($request->all());
+        // dd($request->file('files'));
+        // dd($request->hasFile('files'));
+
         Log::info('Upload request received');
         Log::info('Request headers', ['headers' => $request->headers->all()]);
         Log::info('Request all', ['request' => $request->all()]);
         Log::info('Request files', ['files' => $request->file()]);
 
-        if ($request->hasFile('file')) {
-            try {
-                $file = $request->file('file');
-                $extension = $file->getClientOriginalExtension();
-                Log::info('File received', [
-                    'file_name' => $file->getClientOriginalName(),
-                    'file_size' => $file->getSize(),
-                    'mime_type' => $file->getMimeType(),
-                    'extension' => $extension
-                ]);
+        // POSTされてきたuser_id, filesをそれぞれ変数に代入
+        $userId = $request->user_id;
+        $jsonFile = $request->json;
+        $items = $request->file('files');
+        // dd($userId);
+        // dd($json);
+        // dd($items);
 
-                // 一意のファイル名を生成
-                $uniqueFileName = Str::uuid() . '.' . $extension;
+        // 変数:S3での保存先ディレクトリ
+        $s3WarehousesRootPath = 'warehouses/';
 
-                // ファイルの内容を取得
-                $fileContents = file_get_contents($file->getRealPath());
+        // 1ユーザーが持つ1つのjsonファイルを保存
+        try {
+            Log::info('json received', [$jsonFile]);
 
-                // S3にファイルをアップロード
-                $path = 'uploads/' . $uniqueFileName;
-                $result = Storage::disk('s3')->put($path, $fileContents, [
-                    'ContentType' => 'model/vnd.fbx'
-                ]);
+            // 拡張子を取得
+            $extension = $jsonFile->getClientOriginalExtension();
+            // 一意のファイル名を生成
+            $uniqueFileName = Str::uuid() . '.' . $extension;
 
-                if (!$result) {
-                    throw new \Exception('S3へのアップロードに失敗しました');
+            // ファイルの内容を取得
+            $fileContents = file_get_contents($jsonFile->getRealPath());
+
+            // S3にファイルをアップロード
+            // filesにあるファイル群を、同じフォルダ内に保存するためのパス
+            $path = $s3WarehousesRootPath . $userId .'/'. $uniqueFileName;
+            
+            // 各ファイルのMIMEタイプを取得
+            $mimeType = $jsonFile->getMimeType();
+
+            // 保存実行
+            $result = Storage::disk('s3')->put($path, $fileContents, [
+                'ContentType' => $mimeType
+            ]);
+
+            if (!$result) {
+                throw new \Exception('jsonファイルのアップロードに失敗しました');
+            }
+
+            // S3のURLを取得
+            $url = Storage::disk('s3')->url($path);
+
+            Log::info('File uploaded successfully', ['url' => $url]);
+            // return response()->json(['url' => $url], 200);
+        } catch (\Exception $e) {
+            Log::error('File upload failed', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'jsonファイルのアップロードに失敗しました'], 500);
+        }
+
+        // filesにある複数アイテムを保存
+        foreach($items as $item){
+            // dd($item);
+
+            // 一意のwarehouse_id(アイテムのID)を生成
+            $uniqueWarehouseId = Str::uuid();
+
+            // 1アイテムが持つ複数ファイルを保存
+            foreach($item as $file){
+                try {
+                    // dd($file);
+                    
+                    $extension = $file->getClientOriginalExtension();
+                    Log::info('File received', [
+                        'file_name' => $file->getClientOriginalName(),
+                        'file_size' => $file->getSize(),
+                        'mime_type' => $file->getMimeType(),
+                        'extension' => $extension
+                    ]);
+
+                    // 一意のファイル名を生成
+                    $uniqueFileName = Str::uuid() . '.' . $extension;
+
+                    // ファイルの内容を取得
+                    $fileContents = file_get_contents($file->getRealPath());
+
+                    // S3にファイルをアップロード
+                    // filesにあるファイル群を、同じフォルダ内に保存するためのパス
+                    $path = $s3WarehousesRootPath . $userId .'/'. $uniqueWarehouseId .'/'. $uniqueFileName;
+                    
+                    // 各ファイルのMIMEタイプを取得
+                    $mimeType = $file->getMimeType();
+
+                    // 保存実行
+                    $result = Storage::disk('s3')->put($path, $fileContents, [
+                        'ContentType' => $mimeType
+                    ]);
+
+                    if (!$result) {
+                        throw new \Exception('S3へのアップロードに失敗しました');
+                    }
+
+                    // S3のURLを取得
+                    $url = Storage::disk('s3')->url($path);
+
+                    Log::info('File uploaded successfully', ['url' => $url]);
+                    // return response()->json(['url' => $url], 200);
+                } catch (\Exception $e) {
+                    Log::error('File upload failed', ['error' => $e->getMessage()]);
+                    return response()->json(['error' => 'ファイルのアップロードに失敗しました'], 500);
                 }
-
-                // S3のURLを取得
-                $url = Storage::disk('s3')->url($path);
-
-                Log::info('File uploaded successfully', ['url' => $url]);
-                return response()->json(['url' => $url], 200);
-            } catch (\Exception $e) {
-                Log::error('File upload failed', ['error' => $e->getMessage()]);
-                return response()->json(['error' => 'ファイルのアップロードに失敗しました'], 500);
             }
         }
 
+        // 
         Log::error('No file found in the request');
         return response()->json(['error' => 'ファイルが見つかりません'], 400);
     }
