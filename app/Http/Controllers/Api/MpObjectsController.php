@@ -1,11 +1,12 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api;
 
-use App\Models\Shelf;
+use App\Http\Controllers\Controller;
+use App\Models\Mp_objects;
 use Illuminate\Http\Request;
 
-class ShelfController extends Controller
+class MpObjectsController extends Controller
 {
     /**
      * Display a listing of the resource.
@@ -34,7 +35,7 @@ class ShelfController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Shelf $shelf)
+    public function show(Mp_objects $mp_objects)
     {
         //
     }
@@ -42,7 +43,7 @@ class ShelfController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(Shelf $shelf)
+    public function edit(Mp_objects $mp_objects)
     {
         //
     }
@@ -50,7 +51,7 @@ class ShelfController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Shelf $shelf)
+    public function update(Request $request, Mp_objects $mp_objects)
     {
         //
     }
@@ -58,7 +59,7 @@ class ShelfController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Shelf $shelf)
+    public function destroy(Mp_objects $mp_objects)
     {
         //
     }

@@ -1,11 +1,12 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api;
 
-use App\Models\Mp_objects;
+use App\Http\Controllers\Controller;
+use App\Models\Room;
 use Illuminate\Http\Request;
 
-class MpObjectsController extends Controller
+class RoomController extends Controller
 {
     /**
      * Display a listing of the resource.
@@ -34,7 +35,7 @@ class MpObjectsController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Mp_objects $mp_objects)
+    public function show(Room $room)
     {
         //
     }
@@ -42,7 +43,7 @@ class MpObjectsController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(Mp_objects $mp_objects)
+    public function edit(Room $room)
     {
         //
     }
@@ -50,7 +51,7 @@ class MpObjectsController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Mp_objects $mp_objects)
+    public function update(Request $request, Room $room)
     {
         //
     }
@@ -58,7 +59,7 @@ class MpObjectsController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Mp_objects $mp_objects)
+    public function destroy(Room $room)
     {
         //
     }
