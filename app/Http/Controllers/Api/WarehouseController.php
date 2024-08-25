@@ -52,8 +52,8 @@ class WarehouseController extends Controller
         $path = $s3WarehousesRootPath . $userId .'/'. $uniqueFileName;
         // エラーメッセージ
         $errorMessage = 'jsonファイルのアップロードに失敗しました';
-        // 保存
-        self::saveFile($jsonFile, $path, $errorMessage);
+        // 保存 & 保存先URLを取得
+        $url = self::saveFile($jsonFile, $path, $errorMessage);
 
         // filesにある複数アイテムを保存
         foreach($items as $item){
@@ -71,8 +71,8 @@ class WarehouseController extends Controller
                     $path = $s3WarehousesRootPath . $userId .'/'. $uniqueWarehouseId .'/'. $uniqueFileName;
                     // エラーメッセージ
                     $errorMessage = 'ファイルのアップロードに失敗しました';
-                    // 保存
-                    self::saveFile($jsonFile, $path, $errorMessage);
+                    // 保存 & 保存先URLを取得
+                    $url = self::saveFile($file, $path, $errorMessage);
                 }
 
                 // textures用のファイル群を複数保存
@@ -83,8 +83,8 @@ class WarehouseController extends Controller
                         $path = $s3WarehousesRootPath . $userId .'/'. $uniqueWarehouseId .'/'. 'textures/' . $uniqueFileName;
                         // エラーメッセージ
                         $errorMessage = 'textures用ファイルのアップロードに失敗しました';
-                        // 保存
-                        self::saveFile($jsonFile, $path, $errorMessage);
+                        // 保存 & 保存先URLを取得
+                        $url = self::saveFile($texture, $path, $errorMessage);
                     }
                 }
             }
@@ -107,7 +107,9 @@ class WarehouseController extends Controller
                 throw new \Exception($errorMessage);
             }
 
-            self::getFileStoredPath($path);
+            $url = self::getFileStoredPath($path);
+
+            return $url;
         } catch (\Exception $e) {
             self::errorLog($e, $errorMessage);
         }
@@ -160,14 +162,14 @@ class WarehouseController extends Controller
         $url = Storage::disk('s3')->url($path);
         Log::info('File uploaded successfully', ['url' => $url]);
 
-        // return response()->json(['url' => $url], 200);
+        return $url;
     }
 
     // エラーを出力
     private function errorLog($e, $errorMessage) {
         Log::error('File upload failed', ['error' => $e->getMessage()]);
 
-        // return response()->json(['error' => $errorMessage], 500);
+        return response()->json(['error' => $errorMessage], 500);
     }
 
     /**
