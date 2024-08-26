@@ -47,9 +47,8 @@ class WarehouseController extends Controller
         $s3WarehousesRootPath = 'warehouses/';
 
         // 1ユーザーが持つ1つのjsonファイルを保存
-        // 保存先pathを生成
-        $uniqueFileName = self::generateUniqueFileName($jsonFile);            
-        $path = $s3WarehousesRootPath . $userId .'/'. $uniqueFileName;
+        // ファイル名を含まない保存先パス
+        $path = $s3WarehousesRootPath . $userId .'/';
         // エラーメッセージ
         $errorMessage = 'jsonファイルのアップロードに失敗しました';
         // 保存 & 保存先URLを取得
@@ -63,12 +62,11 @@ class WarehouseController extends Controller
 
             // 1アイテムが持つ複数ファイルを保存
             foreach($item as $file){
-
+                
                 // fbxファイル、サムネイル用の.pngファイルを保存
                 if (!is_array($file)) {
-                    // 保存先pathを生成
-                    $uniqueFileName = self::generateUniqueFileName($file);
-                    $path = $s3WarehousesRootPath . $userId .'/'. $uniqueWarehouseId .'/'. $uniqueFileName;
+                    // ファイル名を含まない保存先パス
+                    $path = $s3WarehousesRootPath . $userId .'/'. $uniqueWarehouseId .'/';
                     // エラーメッセージ
                     $errorMessage = 'ファイルのアップロードに失敗しました';
                     // 保存 & 保存先URLを取得
@@ -78,9 +76,8 @@ class WarehouseController extends Controller
                 // textures用のファイル群を複数保存
                 else {
                     foreach($file as $texture){
-                        // 保存先pathを生成
-                        $uniqueFileName = self::generateUniqueFileName($texture);
-                        $path = $s3WarehousesRootPath . $userId .'/'. $uniqueWarehouseId .'/'. 'textures/' . $uniqueFileName;
+                        // ファイル名を含まない保存先パス
+                        $path = $s3WarehousesRootPath . $userId .'/'. $uniqueWarehouseId .'/'. 'textures/';
                         // エラーメッセージ
                         $errorMessage = 'textures用ファイルのアップロードに失敗しました';
                         // 保存 & 保存先URLを取得
@@ -97,17 +94,17 @@ class WarehouseController extends Controller
     // ファイルを保存
     private function saveFile($file, $path, $errorMessage) {
         try {
-            self::logFileReceived($file);
-            $uniqueFileName = self::generateUniqueFileName($file);            
+            self::logFileReceived($file);   
+            $filePath = self::generateFilePath($file, $path);
             $fileContents = self::getFileContentes($file);
             $mimeType = self::getMimeType($file);
-            $result = self::saveToS3($path, $fileContents, $mimeType);
+            $result = self::saveToS3($filePath, $fileContents, $mimeType);
 
             if (!$result) {
                 throw new \Exception($errorMessage);
             }
 
-            $url = self::getFileStoredPath($path);
+            $url = self::getFileStoredPath($filePath);
 
             return $url;
         } catch (\Exception $e) {
@@ -125,20 +122,19 @@ class WarehouseController extends Controller
         ]);
     }
 
+    // ファイル保存先のパスを生成
+    private function generateFilePath($file, $path) {
+        // ファイル名を取得
+        $originalFileName = $file->getClientOriginalName();
+        // パスを生成
+        $filePath = $path . $originalFileName;
+        
+        return $filePath;
+    }
+
     // ファイルの内容を取得
     private function getFileContentes($file) {
         return $fileContents = file_get_contents($file->getRealPath());
-    }
-
-    // 一意のファイル名を生成
-    private function generateUniqueFileName($file) {
-        // 拡張子を取得
-        $extension = $file->getClientOriginalExtension();
-        
-        // ファイル名を生成
-        $uniqueFileName = Str::uuid() . '.' . $extension;
-        
-        return $uniqueFileName;
     }
 
     // ファイルのMIMEタイプを取得
