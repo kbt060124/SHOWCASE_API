@@ -38,22 +38,26 @@ class WarehouseController extends Controller
         Log::info('Request all', ['request' => $request->all()]);
         Log::info('Request file', ['file' => $request->file()]);
 
-        // POSTされてきたuser_id, fileをそれぞれ変数に代入
-        $userId = $request->user_id;
-        $fbxFile = $request->file('file');
+        // リクエストにファイルが存在する場合
+        if ($request->hasFile('file')) {
+            // POSTされてきたuser_id, fileをそれぞれ変数に代入
+            $userId = $request->user_id;
+            $fbxFile = $request->file('file');
 
-        // S3の保存先ディレクトリ
-        $s3WarehousesRootPath = 'warehouses/';
+            // S3の保存先ディレクトリ
+            $s3WarehousesRootPath = 'warehouses/';
 
-        // fbxファイルを保存
-        // ファイル名を含まない保存先パス
-        $path = $s3WarehousesRootPath . '/singleFbxFile' . '/' . $userId . '/';
-        // エラーメッセージ
-        $errorMessage = 'fbxファイルのアップロードに失敗しました';
-        // 保存 & 保存先URLを取得
-        $url = self::saveFile($fbxFile, $path, $errorMessage);
-        return $url;
+            // fbxファイルを保存
+            // ファイル名を含まない保存先パス
+            $path = $s3WarehousesRootPath . '/singleFbxFile' . '/' . $userId . '/';
+            // エラーメッセージ
+            $errorMessage = 'fbxファイルのアップロードに失敗しました';
+            // 保存 & 保存先URLを取得
+            $url = self::saveFile($fbxFile, $path, $errorMessage);
+            return $url;
+        }
 
+        // ファイルが送られてきていない場合
         Log::error('No file found in the request');
         return response()->json(['error' => 'ファイルが見つかりません'], 400);
     }
