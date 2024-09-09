@@ -10,4 +10,5 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 
 Route::get('/warehouses', [WarehouseController::class, 'index'])->name('warehouses.index');
 Route::post('/warehouses/store', [WarehouseController::class, 'store'])->name('warehouses.store');
+Route::post('/warehouses/store/singleFbxFile', [WarehouseController::class, 'storeSingleFbxFile'])->name('warehouses.storeSingleFbxFile');
 Route::get('/warehouses/download/{warehouse_id}', [WarehouseController::class, 'download'])->name('warehouses.download');
