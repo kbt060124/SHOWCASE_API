@@ -30,53 +30,109 @@ class WarehouseController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function storeSingleFbxFile(Request $request)
     {
+        // ログを出力
         Log::info('Upload request received');
         Log::info('Request headers', ['headers' => $request->headers->all()]);
         Log::info('Request all', ['request' => $request->all()]);
-        Log::info('Request files', ['files' => $request->file()]);
+        Log::info('Request file', ['file' => $request->file()]);
 
-        if ($request->hasFile('file')) {
-            try {
-                $file = $request->file('file');
-                $extension = $file->getClientOriginalExtension();
-                Log::info('File received', [
-                    'file_name' => $file->getClientOriginalName(),
-                    'file_size' => $file->getSize(),
-                    'mime_type' => $file->getMimeType(),
-                    'extension' => $extension
-                ]);
+        // POSTされてきたuser_id, fileをそれぞれ変数に代入
+        $userId = $request->user_id;
+        $fbxFile = $request->file('file');
 
-                // 一意のファイル名を生成
-                $uniqueFileName = Str::uuid() . '.' . $extension;
+        // S3の保存先ディレクトリ
+        $s3WarehousesRootPath = 'warehouses/';
 
-                // ファイルの内容を取得
-                $fileContents = file_get_contents($file->getRealPath());
-
-                // S3にファイルをアップロード
-                $path = 'uploads/' . $uniqueFileName;
-                $result = Storage::disk('s3')->put($path, $fileContents, [
-                    'ContentType' => 'model/vnd.fbx'
-                ]);
-
-                if (!$result) {
-                    throw new \Exception('S3へのアップロードに失敗しました');
-                }
-
-                // S3のURLを取得
-                $url = Storage::disk('s3')->url($path);
-
-                Log::info('File uploaded successfully', ['url' => $url]);
-                return response()->json(['url' => $url], 200);
-            } catch (\Exception $e) {
-                Log::error('File upload failed', ['error' => $e->getMessage()]);
-                return response()->json(['error' => 'ファイルのアップロードに失敗しました'], 500);
-            }
-        }
+        // fbxファイルを保存
+        // ファイル名を含まない保存先パス
+        $path = $s3WarehousesRootPath . '/singleFbxFile' . '/' . $userId . '/';
+        // エラーメッセージ
+        $errorMessage = 'fbxファイルのアップロードに失敗しました';
+        // 保存 & 保存先URLを取得
+        $url = self::saveFile($fbxFile, $path, $errorMessage);
+        return $url;
 
         Log::error('No file found in the request');
         return response()->json(['error' => 'ファイルが見つかりません'], 400);
+    }
+
+    // ファイルを保存
+    private function saveFile($file, $path, $errorMessage) {
+        try {
+            self::logFileReceived($file);   
+            $filePath = self::generateFilePath($file, $path);
+            $fileContents = self::getFileContentes($file);
+            $mimeType = self::getMimeType($file);
+            $result = self::saveToS3($filePath, $fileContents, $mimeType);
+
+            if (!$result) {
+                throw new \Exception($errorMessage);
+            }
+
+            $url = self::getFileStoredPath($filePath);
+
+            return $url;
+        } catch (\Exception $e) {
+            self::errorLog($e, $errorMessage);
+        }
+    }
+
+    // ファイルに関するログを出力
+    private function logFileReceived($file) {
+        Log::info('File received', [
+            'file_name' => $file->getClientOriginalName(),
+            'file_size' => $file->getSize(),
+            'mime_type' => $file->getMimeType(),
+            'extension' => $file->getClientOriginalExtension()
+        ]);
+    }
+
+    // ファイル保存先のパスを生成
+    private function generateFilePath($file, $path) {
+        // ファイル名を取得
+        $originalFileName = $file->getClientOriginalName();
+        // パスを生成
+        $filePath = $path . $originalFileName;
+        
+        return $filePath;
+    }
+
+    // ファイルの内容を取得
+    private function getFileContentes($file) {
+        return $fileContents = file_get_contents($file->getRealPath());
+    }
+
+    // ファイルのMIMEタイプを取得
+    private function getMimeType($file) {
+        return $mimeType = $file->getMimeType();
+    }
+
+    // AWS S3に保存
+    private function saveToS3($path, $fileContents, $mineType) {
+        $result = Storage::disk('s3')->put(
+            $path,
+            $fileContents,
+            ['ContentType' => $mineType]
+        );
+        
+        return $result;
+    }
+
+    // ファイル保存先パスを取得
+    private function getFileStoredPath($path) {
+        $url = Storage::disk('s3')->url($path);
+        Log::info('File uploaded successfully', ['url' => $url]);
+
+        return $url;
+    }
+
+    // エラーを出力
+    private function errorLog($e, $errorMessage) {
+        Log::error('File upload failed', ['error' => $e->getMessage()]);
+
+        return response()->json(['error' => $errorMessage], 500);
     }
 
     /**
