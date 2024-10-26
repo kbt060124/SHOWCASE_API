@@ -6,8 +6,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Warehouse extends Model
+class Marketplace extends Model
 {
     use HasFactory;
 
@@ -16,8 +17,10 @@ class Warehouse extends Model
         'item_id',
         'name',
         'thumbnail',
-        'favorite',
-        'memo',
+        'tags',
+        'views',
+        'price',
+        'status',
     ];
 
     public function user(): BelongsTo
@@ -30,18 +33,18 @@ class Warehouse extends Model
         return $this->belongsTo(Item::class);
     }
 
-    public function tags(): BelongsToMany
+    public function comments(): HasMany
     {
-        return $this->belongsToMany(Whtag::class);
+        return $this->hasMany(Mpcomment::class);
     }
 
-    public function rooms(): BelongsToMany
+    public function tags(): BelongsToMany
     {
-        return $this->belongsToMany(Room::class)->withPivot([
-            'position_x', 'position_y', 'position_z',
-            'rotation_x', 'rotation_y', 'rotation_z', 'rotation_w',
-            'scale_x', 'scale_y', 'scale_z',
-            'parentindex'
-        ])->withTimestamps();
+        return $this->belongsToMany(Mptag::class);
+    }
+
+    public function users(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class);
     }
 }
