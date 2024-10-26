@@ -4,18 +4,38 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Room extends Model
 {
     use HasFactory;
 
-    public function user()
+    protected $fillable = ['user_id', 'name'];
+
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    public function bucket()
+    public function comments(): HasMany
     {
-        return $this->belongsTo(Bucket::class);
+        return $this->hasMany(RoomComment::class);
+    }
+
+    public function users(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class);
+    }
+
+    public function warehouses(): BelongsToMany
+    {
+        return $this->belongsToMany(Warehouse::class)->withPivot([
+            'position_x', 'position_y', 'position_z',
+            'rotation_x', 'rotation_y', 'rotation_z', 'rotation_w',
+            'scale_x', 'scale_y', 'scale_z',
+            'parentindex'
+        ])->withTimestamps();
     }
 }
