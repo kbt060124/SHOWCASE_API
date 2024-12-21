@@ -25,9 +25,9 @@ class Warehouse extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function item(): BelongsTo
+    public function liked(): BelongsToMany
     {
-        return $this->belongsTo(Item::class);
+        return $this->belongsToMany(User::class);
     }
 
     public function tags(): BelongsToMany

@@ -16,7 +16,6 @@ class WarehouseSeeder extends Seeder
         for ($i = 1; $i <= 24; $i++) {
             Warehouse::create([
                 'user_id' => 1,
-                'item_id' => $i,
                 'name' => "アイテム{$i}",
                 'thumbnail' => "{$i}.png",
                 'favorite' => 0,

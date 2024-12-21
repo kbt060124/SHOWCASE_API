@@ -77,7 +77,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('thumbnail');
             $table->boolean('favorite');
-            $table->text('memo')->nullable();;
+            $table->text('memo')->nullable();
             $table->timestamps();
         });
 

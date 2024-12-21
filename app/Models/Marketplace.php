@@ -12,16 +12,16 @@ class Marketplace extends Model
 {
     use HasFactory;
 
-    protected $fillable = [
-        'user_id',
-        'item_id',
-        'name',
-        'thumbnail',
-        'tags',
-        'views',
-        'price',
-        'status',
-    ];
+    // protected $fillable = [
+    //     'user_id',
+    //     'item_id',
+    //     'name',
+    //     'thumbnail',
+    //     'tags',
+    //     'views',
+    //     'price',
+    //     'status',
+    // ];
 
     public function user(): BelongsTo
     {
@@ -43,8 +43,18 @@ class Marketplace extends Model
         return $this->belongsToMany(Mptag::class);
     }
 
-    public function users(): BelongsToMany
+    public function liked(): BelongsToMany
     {
         return $this->belongsToMany(User::class);
+    }
+
+    public function billingLogs(): HasMany
+    {
+        return $this->hasMany(BillingLog::class);
+    }
+
+    public function purchaseRecords(): HasMany
+    {
+        return $this->hasMany(PurchaseRecord::class);
     }
 }
