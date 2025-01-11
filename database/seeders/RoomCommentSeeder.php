@@ -14,10 +14,12 @@ class RoomCommentSeeder extends Seeder
         $users = User::all();
         $rooms = Room::all();
 
-        RoomComment::create([
-            'user_id' => $users->random()->id,
-            'room_id' => $room->id,
-            'comment' => "これはテストコメント{$i}です。",
-        ]);
+        foreach ($rooms as $room) {
+            RoomComment::create([
+                'user_id' => $users->random()->id,
+                'room_id' => $room->id,
+                'comment' => "これはテストコメントです。",
+            ]);
+        }
     }
 }
