@@ -45,13 +45,28 @@ class User extends Authenticatable
         ];
     }
 
-    public function warehouses()
+    public function items()
     {
-        return $this->hasMany(Warehouse::class);
+        return $this->hasMany(Item::class);
     }
 
     public function rooms()
     {
         return $this->hasMany(Room::class);
+    }
+
+    public function logs()
+    {
+        return $this->hasMany(Log::class);
+    }
+
+    public function likeRooms()
+    {
+        return $this->belongsToMany(Room::class)->withTimestamps();
+    }
+
+    public function roomComments()
+    {
+        return $this->hasMany(RoomComment::class);
     }
 }

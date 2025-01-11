@@ -5,42 +5,32 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-class Item extends Model
+class Warehouse extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'origin_id',
-        'itemtype_id',
-        'filetype_id',
-        'totalsize',
-        'filename',
+        'user_id',
+        'item_id',
+        'name',
+        'thumbnail',
+        'memo',
     ];
 
-    public function origin(): BelongsTo
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(ItemOrigin::class, 'origin_id');
+        return $this->belongsTo(User::class);
     }
 
-    public function itemType(): BelongsTo
+    public function rooms(): BelongsToMany
     {
-        return $this->belongsTo(ItemType::class, 'itemtype_id');
-    }
-
-    public function fileType(): BelongsTo
-    {
-        return $this->belongsTo(ItemFiletype::class, 'filetype_id');
-    }
-
-    public function marketplaces(): HasMany
-    {
-        return $this->hasMany(Marketplace::class);
-    }
-
-    public function warehouses(): HasMany
-    {
-        return $this->hasMany(Warehouse::class);
+        return $this->belongsToMany(Room::class)->withPivot([
+            'position_x', 'position_y', 'position_z',
+            'rotation_x', 'rotation_y', 'rotation_z', 'rotation_w',
+            'scale_x', 'scale_y', 'scale_z',
+            'parentindex'
+        ])->withTimestamps();
     }
 }

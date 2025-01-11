@@ -29,9 +29,9 @@ class Room extends Model
         return $this->belongsToMany(User::class);
     }
 
-    public function warehouses(): BelongsToMany
+    public function items(): BelongsToMany
     {
-        return $this->belongsToMany(Warehouse::class)->withPivot([
+        return $this->belongsToMany(Item::class)->withPivot([
             'position_x', 'position_y', 'position_z',
             'rotation_x', 'rotation_y', 'rotation_z', 'rotation_w',
             'scale_x', 'scale_y', 'scale_z',
