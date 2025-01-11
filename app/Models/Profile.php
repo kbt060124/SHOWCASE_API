@@ -16,7 +16,6 @@ class Profile extends Model
         'last_name',
         'fast_name',
         'user_thumbnail',
-        'main_room_view',
     ];
 
     public function user(): BelongsTo

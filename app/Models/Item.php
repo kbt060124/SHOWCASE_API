@@ -16,23 +16,12 @@ class Warehouse extends Model
         'item_id',
         'name',
         'thumbnail',
-        'favorite',
         'memo',
     ];
 
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    }
-
-    public function liked(): BelongsToMany
-    {
-        return $this->belongsToMany(User::class);
-    }
-
-    public function tags(): BelongsToMany
-    {
-        return $this->belongsToMany(Whtag::class);
     }
 
     public function rooms(): BelongsToMany

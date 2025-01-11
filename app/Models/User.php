@@ -45,9 +45,9 @@ class User extends Authenticatable
         ];
     }
 
-    public function warehouses()
+    public function items()
     {
-        return $this->hasMany(Warehouse::class);
+        return $this->hasMany(Item::class);
     }
 
     public function rooms()
@@ -55,64 +55,18 @@ class User extends Authenticatable
         return $this->hasMany(Room::class);
     }
 
-    public function billingLogs()
-    {
-        return $this->hasMany(BillingLog::class);
-    }
-
     public function logs()
     {
         return $this->hasMany(Log::class);
     }
 
-    public function likeMaketplaces()
+    public function likeRooms()
     {
-        return $this->belongsToMany(Marketplace::class)->withTimestamps();
+        return $this->belongsToMany(Room::class)->withTimestamps();
     }
 
-    public function likeWarehouses()
+    public function roomComments()
     {
-        return $this->belongsToMany(Warehouse::class)->withTimestamps();
-    }
-
-    public function marketplaces()
-    {
-        return $this->hasMany(Marketplace::class);
-    }
-
-    public function mpcomments()
-    {
-        return $this->hasMany(Mpcomment::class);
-    }
-
-    public function warehouseComments()
-    {
-        return $this->hasMany(WarehouseComment::class);
-    }
-
-    /**
-     * ユーザーが受け取った通知
-     */
-    public function notifications(): HasMany
-    {
-        return $this->hasMany(Notification::class);
-    }
-
-    /**
-     * ユーザーが発生させた通知
-     */
-    public function actionNotifications(): HasMany
-    {
-        return $this->hasMany(Notification::class, 'action_user_id');
-    }
-
-    public function purchasePoint(): BelongsTo
-    {
-        return $this->belongsTo(PurchasePoint::class);
-    }
-
-    public function purchaseRecords(): HasMany
-    {
-        return $this->hasMany(PurchaseRecord::class);
+        return $this->hasMany(RoomComment::class);
     }
 }

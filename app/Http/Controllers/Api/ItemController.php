@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Warehouse;
+use App\Models\Item;
 use Illuminate\Http\Request;
 
-class WarehouseController extends Controller
+class ItemController extends Controller
 {
     /**
      * Display a listing of the resource.
