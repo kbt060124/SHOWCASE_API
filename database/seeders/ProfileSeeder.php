@@ -18,8 +18,7 @@ class ProfileSeeder extends Seeder
                 'last_name' => '姓' . $user->id,
                 'first_name' => '名' . $user->id,
                 'user_thumbnail' => 'default_thumbnail.png',
-                'main_room_view' => 'default_room.png',
-                'main_room_view' => '車'
+                'attribute' => 'ミニカー',
             ]);
         }
     }

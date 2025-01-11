@@ -14,10 +14,11 @@ class ItemSeeder extends Seeder
     public function run(): void
     {
         for ($i = 1; $i <= 24; $i++) {
-            Item::create([
-                'origin_id' => 2,
-                'itemtype_id' => 1,
-                'filetype_id' => 1,
+            Warehouse::create([
+                'user_id' => 1,
+                'name' => "アイテム{$i}",
+                'thumbnail' => "{$i}.png",
+                'memo' => "これはアイテム{$i}のメモです。",
                 'totalsize' => rand(1000, 1000000),
                 'filename' => "{$i}.glb",
             ]);
