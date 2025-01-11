@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained('users');
             $table->string('nickname');
             $table->string('last_name');
-            $table->string('fast_name');
+            $table->string('first_name');
             $table->string('user_thumbnail')->nullable();
             $table->string('attribute')->nullable();
             $table->timestamps();

@@ -13,21 +13,10 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             UserSeeder::class,
-            // ItemOriginSeeder::class,
-            // ItemTypeSeeder::class,
-            // ItemFiletypeSeeder::class,
-            // ItemSeeder::class,
             ProfileSeeder::class,
-            MptagSeeder::class,
-            MarketplaceSeeder::class,
-            MarketplaceMptagSeeder::class,
-            WhtagSeeder::class,
-            WarehouseSeeder::class,
-            // RoomSeeder::class,
-            MpcommentSeeder::class,
-            // WarehouseCommentSeeder::class,
-            // RoomCommentSeeder::class,
-            PurchasePointSeeder::class,
+            ItemSeeder::class,
+            RoomSeeder::class,
+            RoomCommentSeeder::class,
         ]);
     }
 }

@@ -19,7 +19,6 @@ class UserSeeder extends Seeder
                 'name' => 'テストユーザー'. $i,
                 'email' => 'test'.$i.'@example.com',
                 'password' => Hash::make('password'),
-                'type' => 1,
             ]);
         }
 

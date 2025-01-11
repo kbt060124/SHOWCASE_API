@@ -14,7 +14,7 @@ class ItemSeeder extends Seeder
     public function run(): void
     {
         for ($i = 1; $i <= 24; $i++) {
-            Warehouse::create([
+            Item::create([
                 'user_id' => 1,
                 'name' => "アイテム{$i}",
                 'thumbnail' => "{$i}.png",
