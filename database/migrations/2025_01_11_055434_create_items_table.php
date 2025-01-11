@@ -11,11 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('rooms', function (Blueprint $table) {
+        Schema::create('items', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('bucket_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained('users');
+            $table->string('name')->nullable();
+            $table->string('thumbnail');
+            $table->text('memo')->nullable();
+            $table->integer('totalsize')->nullable();
+            $table->string('filename');
             $table->timestamps();
         });
     }
@@ -25,6 +28,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('rooms');
+        Schema::dropIfExists('items');
     }
 };

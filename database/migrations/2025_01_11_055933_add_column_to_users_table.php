@@ -11,13 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::dropIfExists('mp_objects');
-        Schema::dropIfExists('warehouses');
-        Schema::dropIfExists('rooms');
-        Schema::dropIfExists('shelves');
-        Schema::dropIfExists('buckets');
-        Schema::dropIfExists('categories');
-        Schema::dropIfExists('types');
+        Schema::table('users', function (Blueprint $table) {
+            $table->integer('type')->after('password');
+        });
     }
 
     /**
@@ -25,6 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // 注意: この操作は元に戻せません
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn('type');
+        });
     }
 };
