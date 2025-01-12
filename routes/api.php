@@ -12,7 +12,7 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
     return $request->user();
 });
 
-// Route::middleware(['auth:sanctum'])->group(function () {
+Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/profile/show/{user_id}', [ProfileController::class, 'show'])->name('profile.show');
     Route::put('/profile/update/{user_id}', [ProfileController::class, 'update'])->name('profile.update');
     Route::get('/profile/search', [ProfileController::class, 'search'])->name('profile.search');
@@ -32,5 +32,4 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 
     Route::post('/room/like/{room_id}', [RoomFavoriteController::class, 'like'])->name('room.like');
     Route::post('/room/dislike/{room_id}', [RoomFavoriteController::class, 'dislike'])->name('room.dislike');
-
-    // });
+});
