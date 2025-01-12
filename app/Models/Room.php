@@ -32,10 +32,22 @@ class Room extends Model
     public function items(): BelongsToMany
     {
         return $this->belongsToMany(Item::class)->withPivot([
-            'position_x', 'position_y', 'position_z',
-            'rotation_x', 'rotation_y', 'rotation_z', 'rotation_w',
-            'scale_x', 'scale_y', 'scale_z',
+            'position_x',
+            'position_y',
+            'position_z',
+            'rotation_x',
+            'rotation_y',
+            'rotation_z',
+            'rotation_w',
+            'scale_x',
+            'scale_y',
+            'scale_z',
             'parentindex'
         ])->withTimestamps();
+    }
+
+    public function liked()
+    {
+        return $this->belongsToMany(User::class)->withTimestamps();
     }
 }
