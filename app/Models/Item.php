@@ -16,7 +16,9 @@ class Item extends Model
         'item_id',
         'name',
         'thumbnail',
+        'totalsize',
         'memo',
+        'filename'
     ];
 
     public function user(): BelongsTo
