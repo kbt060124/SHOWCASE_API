@@ -80,12 +80,13 @@ docker run --rm \
     composer install --ignore-platform-reqs 
 ```
 3. .envファイルにあるDB関連の下記の5つの値をローカルのものに変更する
-    - DB_HOST=mysql
-    - DB_PORT=3306
-    - DB_DATABASE=showcase
-    - DB_USERNAME=sail
-    - DB_PASSWORD=password
-
+```bash
+    DB_HOST=mysql
+    DB_PORT=3306
+    DB_DATABASE=showcase
+    DB_USERNAME=sail
+    DB_PASSWORD=password
+```
 4. 
 ```bash
 ./vendor/bin/sail build --no-cache
