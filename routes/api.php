@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
-    return $request->user()->load('rooms');
+    return $request->user();
 });
 
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -23,9 +23,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/item/destroy/{item_id}', [ItemController::class, 'destroy'])->name('item.destroy');
     Route::put('/item/update/{item_id}', [ItemController::class, 'update'])->name('item.update');
 
+    Route::get('/room/{user_id}', [RoomController::class, 'index'])->name('room.index');
     Route::post('/room/create', [RoomController::class, 'create'])->name('room.create');
     Route::put('/room/update/{room_id}', [RoomController::class, 'update'])->name('room.update');
-    Route::get('/room/{room_id}', [RoomController::class, 'show'])->name('room.show');
+    Route::get('/room/show/{room_id}', [RoomController::class, 'show'])->name('room.show');
 
     Route::post('/room/comment/store/{room_id}', [RoomCommentController::class, 'store'])->name('room.comment.store');
     Route::delete('/room/comment/destroy/{room_comment_id}', [RoomCommentController::class, 'destroy'])->name('room.comment.destroy');

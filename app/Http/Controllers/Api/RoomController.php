@@ -10,6 +10,31 @@ use App\Models\ItemRoom;
 
 class RoomController extends Controller
 {
+    public function index($user_id)
+    {
+        try {
+            // user_idに紐づくroomテーブルのデータを取得
+            $rooms = Room::where('user_id', $user_id)->get();
+
+            return response()->json([
+                'message' => 'ルーム一覧取得成功',
+                'rooms' => $rooms
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('ルーム一覧取得エラー', [
+                'error' => $e->getMessage(),
+                'user_id' => $user_id,
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return response()->json([
+                'message' => 'ルーム一覧取得失敗',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function show($user_id)
     {
         try {
@@ -21,14 +46,9 @@ class RoomController extends Controller
 
             if ($room) {
                 return response()->json([
-                    'is_room' => true,
                     'room' => $room
                 ], 200);
             }
-
-            return response()->json([
-                'is_room' => false
-            ], 200);
         } catch (\Exception $e) {
             Log::error('ルーム取得エラー', [
                 'error' => $e->getMessage(),
