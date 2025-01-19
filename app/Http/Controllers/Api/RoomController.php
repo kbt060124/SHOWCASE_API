@@ -85,6 +85,7 @@ class RoomController extends Controller
             ], 500);
         }
     }
+
     public function update(Request $request, $room_id)
     {
         $request->validate([
