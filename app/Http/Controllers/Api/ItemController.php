@@ -33,10 +33,10 @@ class ItemController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'file' => 'required|mimes:glb|max:50000',
+            'file' => 'required|mimes:glb|max:100000',
             'user_id' => 'required|integer',
             'name' => 'required|string|max:255',
-            'thumbnail' => 'required|image|max:2048',
+            'thumbnail' => 'required|image|max:5120',
         ]);
 
         // ログを出力
