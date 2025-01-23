@@ -35,24 +35,24 @@ class RoomController extends Controller
         }
     }
 
-    public function show($user_id)
+    public function show($room_id)
     {
         try {
-            // user_idに紐づくroomテーブルのデータを取得（関連するitemsも含める）
-            $room = Room::with(['items' => function ($query) {
-                $query->select('items.*', 'ir.*')
-                    ->join('item_room as ir', 'items.id', '=', 'ir.item_id');
-            }])->where('user_id', $user_id)->get();
-
+            $room = Room::with('items')->find($room_id);
             if ($room) {
                 return response()->json([
+                    'message' => 'ルーム情報取得成功',
                     'room' => $room
                 ], 200);
             }
+
+            return response()->json([
+                'message' => '指定されたルームが見つかりません',
+            ], 404);
         } catch (\Exception $e) {
             Log::error('ルーム取得エラー', [
                 'error' => $e->getMessage(),
-                'user_id' => $user_id,
+                'room_id' => $room_id,
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
