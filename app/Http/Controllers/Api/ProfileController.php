@@ -9,7 +9,7 @@ use App\Models\User;
 
 class ProfileController extends Controller
 {
-    public function show($user_id)
+    public function index($user_id)
     {
         $user = User::with('profile')->findOrFail($user_id);
 
