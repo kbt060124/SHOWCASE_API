@@ -109,65 +109,75 @@ class RoomController extends Controller
     public function update(Request $request, $room_id)
     {
         $request->validate([
-            'itemId' => 'required|integer',
-            'position' => 'required|array',
-            'position.x' => 'required|numeric',
-            'position.y' => 'required|numeric',
-            'position.z' => 'required|numeric',
-            'rotation' => 'required|array',
-            'rotation.x' => 'required|numeric',
-            'rotation.y' => 'required|numeric',
-            'rotation.z' => 'required|numeric',
-            'rotation.w' => 'required|numeric',
-            'scaling' => 'required|array',
-            'scaling.x' => 'required|numeric',
-            'scaling.y' => 'required|numeric',
-            'scaling.z' => 'required|numeric',
-            'parentIndex' => 'required|integer',
+            '*.itemId' => 'required|integer',
+            '*.position' => 'required|array',
+            '*.position.x' => 'required|numeric',
+            '*.position.y' => 'required|numeric',
+            '*.position.z' => 'required|numeric',
+            '*.rotation' => 'required|array',
+            '*.rotation.x' => 'required|numeric',
+            '*.rotation.y' => 'required|numeric',
+            '*.rotation.z' => 'required|numeric',
+            '*.rotation.w' => 'required|numeric',
+            '*.scaling' => 'required|array',
+            '*.scaling.x' => 'required|numeric',
+            '*.scaling.y' => 'required|numeric',
+            '*.scaling.z' => 'required|numeric',
+            '*.parentIndex' => 'required|integer',
         ]);
 
         try {
-            // 更新または新規作成するデータ
-            $itemRoomData = [
-                'position_x' => $request->position['x'],
-                'position_y' => $request->position['y'],
-                'position_z' => $request->position['z'],
-                'rotation_x' => $request->rotation['x'],
-                'rotation_y' => $request->rotation['y'],
-                'rotation_z' => $request->rotation['z'],
-                'rotation_w' => $request->rotation['w'],
-                'scale_x' => $request->scaling['x'],
-                'scale_y' => $request->scaling['y'],
-                'scale_z' => $request->scaling['z'],
-                'parentindex' => $request->parentIndex,
-            ];
+            $messages = [];
+            $itemRooms = [];
 
-            // 既存のレコードを検索
-            $itemRoom = ItemRoom::where('room_id', $room_id)
-                ->where('item_id', $request->itemId)
-                ->first();
+            // リクエストからすべてのitemIdを取得
+            $requestItemIds = collect($request->all())->pluck('itemId')->toArray();
 
-            if ($itemRoom) {
-                // 既存レコードの更新
-                $itemRoom->update($itemRoomData);
-                $message = 'アイテム位置情報を更新しました';
-            } else {
-                // 新規レコードの作成
-                $itemRoomData['room_id'] = $room_id;
-                $itemRoomData['item_id'] = $request->itemId;
-                $itemRoom = ItemRoom::create($itemRoomData);
-                $message = 'アイテム位置情報を新規作成しました';
+            // リクエストに含まれていないitemIdを持つレコードを削除
+            ItemRoom::where('room_id', $room_id)
+                ->whereNotIn('item_id', $requestItemIds)
+                ->delete();
+
+            foreach ($request->all() as $meshData) {
+                $itemRoomData = [
+                    'position_x' => $meshData['position']['x'],
+                    'position_y' => $meshData['position']['y'],
+                    'position_z' => $meshData['position']['z'],
+                    'rotation_x' => $meshData['rotation']['x'],
+                    'rotation_y' => $meshData['rotation']['y'],
+                    'rotation_z' => $meshData['rotation']['z'],
+                    'rotation_w' => $meshData['rotation']['w'],
+                    'scale_x' => $meshData['scaling']['x'],
+                    'scale_y' => $meshData['scaling']['y'],
+                    'scale_z' => $meshData['scaling']['z'],
+                    'parentindex' => $meshData['parentIndex'],
+                ];
+
+                $itemRoom = ItemRoom::where('room_id', $room_id)
+                    ->where('item_id', $meshData['itemId'])
+                    ->first();
+
+                if ($itemRoom) {
+                    $itemRoom->update($itemRoomData);
+                    $messages[] = 'アイテム位置情報を更新しました';
+                } else {
+                    $itemRoomData['room_id'] = $room_id;
+                    $itemRoomData['item_id'] = $meshData['itemId'];
+                    $itemRoom = ItemRoom::create($itemRoomData);
+                    $messages[] = 'アイテム位置情報を新規作成しました';
+                }
+
+                $itemRooms[] = $itemRoom;
             }
 
             return response()->json([
-                'message' => $message,
-                'item_room' => $itemRoom
+                'messages' => $messages,
+                'item_rooms' => $itemRooms
             ], 200);
         } catch (\Exception $e) {
             Log::error('Studioの保存エラー', [
                 'error' => $e->getMessage(),
                 'room_id' => $room_id,
-                'item_id' => $request->itemId,
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
