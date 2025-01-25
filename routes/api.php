@@ -13,7 +13,7 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 });
 
 Route::middleware(['auth:sanctum'])->group(function () {
-    Route::get('/profile/show/{user_id}', [ProfileController::class, 'show'])->name('profile.show');
+    Route::get('/profile/{user_id}', [ProfileController::class, 'index'])->name('profile.index');
     Route::put('/profile/update/{user_id}', [ProfileController::class, 'update'])->name('profile.update');
     Route::get('/profile/search', [ProfileController::class, 'search'])->name('profile.search');
 
@@ -26,7 +26,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/room/{user_id}', [RoomController::class, 'index'])->name('room.index');
     Route::post('/room/create', [RoomController::class, 'create'])->name('room.create');
     Route::put('/room/update/{room_id}', [RoomController::class, 'update'])->name('room.update');
-    Route::get('/room/show/{room_id}', [RoomController::class, 'show'])->name('room.show');
+    Route::get('/room/studio/{room_id}', [RoomController::class, 'studio'])->name('room.studio');
+    Route::get('/room/mainstage/{room_id}', [RoomController::class, 'mainstage'])->name('room.mainstage');
 
     Route::post('/room/comment/store/{room_id}', [RoomCommentController::class, 'store'])->name('room.comment.store');
     Route::delete('/room/comment/destroy/{room_comment_id}', [RoomCommentController::class, 'destroy'])->name('room.comment.destroy');

@@ -35,7 +35,7 @@ class RoomController extends Controller
         }
     }
 
-    public function show($room_id)
+    public function studio($room_id)
     {
         try {
             $room = Room::with('items')->find($room_id);
@@ -63,6 +63,40 @@ class RoomController extends Controller
             ], 500);
         }
     }
+
+    public function mainstage($room_id)
+    {
+        try {
+            $room = Room::with([
+                'liked.profile',
+                'comments.user.profile',
+                'items',
+                'user.profile'
+            ])->find($room_id);
+            if ($room) {
+                return response()->json([
+                    'message' => 'ルーム情報取得成功',
+                    'room' => $room
+                ], 200);
+            }
+            return response()->json([
+                'message' => '指定されたルームが見つかりません',
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('ルーム取得エラー', [
+                'error' => $e->getMessage(),
+                'room_id' => $room_id,
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return response()->json([
+                'message' => 'ルーム取得失敗',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 
     public function create()
     {
