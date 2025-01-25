@@ -12,7 +12,7 @@ class Room extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'name'];
+    protected $fillable = ['user_id', 'name', 'thumbnail'];
 
     public function user(): BelongsTo
     {
