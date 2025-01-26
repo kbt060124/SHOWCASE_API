@@ -14,6 +14,7 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/profile/{user_id}', [ProfileController::class, 'index'])->name('profile.index');
+    Route::post('/profile/create/{user_id}', [ProfileController::class, 'store'])->name('profile.store');
     Route::put('/profile/update/{user_id}', [ProfileController::class, 'update'])->name('profile.update');
     Route::get('/profile/search', [ProfileController::class, 'search'])->name('profile.search');
 
