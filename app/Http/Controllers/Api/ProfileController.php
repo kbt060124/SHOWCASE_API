@@ -75,4 +75,14 @@ class ProfileController extends Controller
 
         return response()->json($user->load('profile'));
     }
+
+    public function search(Request $request)
+    {
+        $query = $request->input('query');
+        $users = User::whereHas('profile', function ($q) use ($query) {
+            $q->where('nickname', 'like', '%' . $query . '%');
+        })->with('profile')->get();
+
+        return response()->json($users);
+    }
 }
