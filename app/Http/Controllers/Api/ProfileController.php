@@ -26,4 +26,32 @@ class ProfileController extends Controller
             'rooms' => $rooms
         ]);
     }
+
+    public function store(Request $request, $user_id)
+    {
+        $user = User::findOrFail($user_id);
+
+        if ($user->profile) {
+            return response()->json([
+                'message' => 'Profile already exists'
+            ], 400);
+        }
+
+        $profile = $user->profile()->create($request->all());
+
+        return response()->json($user->load('profile'));
+    }
+
+    public function update(Request $request, $user_id)
+    {
+        $user = User::with('profile')->findOrFail($user_id);
+
+        if (!$user->profile) {
+            $user->profile()->create($request->all());
+        } else {
+            $user->profile->update($request->all());
+        }
+
+        return response()->json($user->load('profile'));
+    }
 }
