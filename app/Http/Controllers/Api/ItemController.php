@@ -65,26 +65,6 @@ class ItemController extends Controller
                 // GLBファイルの検証
                 $this->validateGlbFile($glbFile);
 
-                // GLBファイルの詳細情報
-                Log::info('GLBファイル情報', [
-                    'original_name' => $glbFile->getClientOriginalName(),
-                    'mime_type' => $glbFile->getMimeType(),
-                    'real_path' => $glbFile->getRealPath(),
-                    'size' => $glbFile->getSize(),
-                    'extension' => $glbFile->getClientOriginalExtension(),
-                    'error' => $glbFile->getError(),
-                ]);
-
-                // サムネイルファイルの詳細情報
-                Log::info('サムネイル情報', [
-                    'original_name' => $thumbnailFile->getClientOriginalName(),
-                    'mime_type' => $thumbnailFile->getMimeType(),
-                    'real_path' => $thumbnailFile->getRealPath(),
-                    'size' => $thumbnailFile->getSize(),
-                    'extension' => $thumbnailFile->getClientOriginalExtension(),
-                    'error' => $thumbnailFile->getError(),
-                ]);
-
                 // ファイル名を取得
                 $glbStoredFileName = $glbFile->getClientOriginalName();
                 $thumbnailStoredFileName = $thumbnailFile->getClientOriginalName();
