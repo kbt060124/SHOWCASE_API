@@ -136,7 +136,82 @@ class ItemController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        //
+        try {
+            $item = Item::findOrFail($id);
+            Log::info('更新前のアイテム情報', ['item' => $item]);
+
+            // バリデーションルールを設定
+            $rules = [
+                'name' => 'nullable|string|max:255',
+                'memo' => 'nullable|string',
+                'thumbnail' => 'nullable|image|max:5120',
+            ];
+
+            $validated = $request->validate($rules);
+
+            $item = Item::findOrFail($id);
+            Log::info('更新前のアイテム情報', ['item' => $item->toArray()]);
+
+            // サムネイル画像が提供された場合の処理
+            if ($request->hasFile('thumbnail')) {
+                Log::info('サムネイル画像更新処理開始', [
+                    'original_name' => $request->file('thumbnail')->getClientOriginalName()
+                ]);
+
+                $thumbnailFile = $request->file('thumbnail');
+
+                // S3の保存先ディレクトリ
+                $s3ItemsRootPath = 'warehouse/';
+                $path = $s3ItemsRootPath . $item->user_id . '/' . $item->id . '/';
+
+                // 古いサムネイル画像を削除
+                $oldThumbnailPath = $path . $item->thumbnail;
+                Log::info('古いサムネイル削除処理', ['old_path' => $oldThumbnailPath]);
+
+                if (Storage::disk('s3')->exists($oldThumbnailPath)) {
+                    Storage::disk('s3')->delete($oldThumbnailPath);
+                    Log::info('古いサムネイル削除成功');
+                }
+
+                // 新しいサムネイル画像を保存
+                $thumbnailErrorMessage = 'サムネイル画像のアップロードに失敗しました';
+                $thumbnailStoredFilePath = $this->generateFilePath($thumbnailFile, $path);
+                $thumbnailStoredFileName = basename($thumbnailStoredFilePath);
+                $thumbnailUrl = $this->saveFile($thumbnailFile, $path, $thumbnailErrorMessage);
+
+                $item->thumbnail = $thumbnailStoredFileName;
+                Log::info('新しいサムネイル保存完了', ['new_thumbnail' => $thumbnailStoredFileName]);
+            }
+
+            // 名前とメモの更新
+            if ($request->has('name')) {
+                $item->name = $request->name;
+            }
+
+            if ($request->has('memo')) {
+                $item->memo = $request->memo;
+            }
+
+            $item->save();
+            Log::info('アイテム更新完了', ['item' => $item->toArray()]);
+
+            return response()->json([
+                'message' => 'アイテム情報を更新しました',
+                'item' => $item
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('アイテム更新エラー', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return response()->json([
+                'message' => 'アイテムの更新に失敗しました',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
