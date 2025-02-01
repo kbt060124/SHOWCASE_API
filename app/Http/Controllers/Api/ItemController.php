@@ -7,6 +7,7 @@ use App\Models\Item;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class ItemController extends Controller
 {
@@ -32,12 +33,21 @@ class ItemController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
-            'file' => 'required|mimes:glb|max:100000',
-            'user_id' => 'required|integer',
-            'name' => 'required|string|max:255',
-            'thumbnail' => 'required|image|max:5120',
-        ]);
+        try {
+            $validated = $request->validate([
+                'file' => 'required|mimes:glb|max:100000',
+                'user_id' => 'required|integer',
+                'name' => 'required|string|max:255',
+                'thumbnail' => 'required|image|max:5120',
+            ]);
+        } catch (ValidationException $e) {
+            Log::error('バリデーションエラー', [
+                'errors' => $e->errors(),
+                'request_data' => $request->all(),
+                'files' => $request->files->all()
+            ]);
+            throw $e;
+        }
 
         // 詳細なリクエスト情報のログ
         Log::info('アップロードリクエスト詳細', [
