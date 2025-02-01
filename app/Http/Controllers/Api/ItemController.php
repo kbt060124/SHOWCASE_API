@@ -39,16 +39,38 @@ class ItemController extends Controller
             'thumbnail' => 'required|image|max:5120',
         ]);
 
-        // ログを出力
-        Log::info('Upload request received');
-        Log::info('Request headers', ['headers' => $request->headers->all()]);
-        Log::info('Request all', ['request' => $request->all()]);
-        Log::info('Request file', ['file' => $request->file()]);
+        // 詳細なリクエスト情報のログ
+        Log::info('アップロードリクエスト詳細', [
+            'headers' => $request->headers->all(),
+            'content_type' => $request->header('Content-Type'),
+            'has_file' => $request->hasFile('file'),
+            'has_thumbnail' => $request->hasFile('thumbnail'),
+        ]);
 
         if ($request->hasFile('file') && $request->hasFile('thumbnail')) {
             try {
                 $glbFile = $request->file('file');
                 $thumbnailFile = $request->file('thumbnail');
+
+                // GLBファイルの詳細情報
+                Log::info('GLBファイル情報', [
+                    'original_name' => $glbFile->getClientOriginalName(),
+                    'mime_type' => $glbFile->getMimeType(),
+                    'real_path' => $glbFile->getRealPath(),
+                    'size' => $glbFile->getSize(),
+                    'extension' => $glbFile->getClientOriginalExtension(),
+                    'error' => $glbFile->getError(),
+                ]);
+
+                // サムネイルファイルの詳細情報
+                Log::info('サムネイル情報', [
+                    'original_name' => $thumbnailFile->getClientOriginalName(),
+                    'mime_type' => $thumbnailFile->getMimeType(),
+                    'real_path' => $thumbnailFile->getRealPath(),
+                    'size' => $thumbnailFile->getSize(),
+                    'extension' => $thumbnailFile->getClientOriginalExtension(),
+                    'error' => $thumbnailFile->getError(),
+                ]);
 
                 // ファイル名を取得
                 $glbStoredFileName = $glbFile->getClientOriginalName();
