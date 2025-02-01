@@ -32,14 +32,7 @@ class ItemController extends Controller
      */
     public function store(Request $request)
     {
-<<<<<<< Updated upstream
-        $request->validate([
-            'file' => 'required|mimes:glb|max:100000',
-            'user_id' => 'required|integer',
-            'name' => 'required|string|max:255',
-            'thumbnail' => 'required|image|max:5120',
-        ]);
-=======
+
         try {
             $validated = $request->validate([
                 'file' => 'required|file|max:100000',
@@ -55,7 +48,6 @@ class ItemController extends Controller
             ]);
             throw $e;
         }
->>>>>>> Stashed changes
 
         // 詳細なリクエスト情報のログ
         Log::info('アップロードリクエスト詳細', [
