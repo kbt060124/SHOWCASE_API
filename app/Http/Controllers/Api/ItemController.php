@@ -32,23 +32,38 @@ class ItemController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
-            'file' => 'required|mimes:glb|max:100000',
-            'user_id' => 'required|integer',
-            'name' => 'required|string|max:255',
-            'thumbnail' => 'required|image|max:5120',
-        ]);
 
-        // ログを出力
-        Log::info('Upload request received');
-        Log::info('Request headers', ['headers' => $request->headers->all()]);
-        Log::info('Request all', ['request' => $request->all()]);
-        Log::info('Request file', ['file' => $request->file()]);
+        try {
+            $validated = $request->validate([
+                'file' => 'required|file|max:100000',
+                'user_id' => 'required|integer',
+                'name' => 'required|string|max:255',
+                'thumbnail' => 'required|image|max:5120',
+            ]);
+        } catch (ValidationException $e) {
+            Log::error('バリデーションエラー', [
+                'errors' => $e->errors(),
+                'request_data' => $request->all(),
+                'files' => $request->files->all()
+            ]);
+            throw $e;
+        }
+
+        // 詳細なリクエスト情報のログ
+        Log::info('アップロードリクエスト詳細', [
+            'headers' => $request->headers->all(),
+            'content_type' => $request->header('Content-Type'),
+            'has_file' => $request->hasFile('file'),
+            'has_thumbnail' => $request->hasFile('thumbnail'),
+        ]);
 
         if ($request->hasFile('file') && $request->hasFile('thumbnail')) {
             try {
                 $glbFile = $request->file('file');
                 $thumbnailFile = $request->file('thumbnail');
+
+                // GLBファイルの検証
+                $this->validateGlbFile($glbFile);
 
                 // ファイル名を取得
                 $glbStoredFileName = $glbFile->getClientOriginalName();
@@ -313,5 +328,30 @@ class ItemController extends Controller
     {
         Log::error('File upload failed', ['error' => $e->getMessage()]);
         throw new \Exception($errorMessage);
+    }
+
+    private function validateGlbFile($file)
+    {
+        // ファイル名の拡張子を確認
+        $extension = strtolower($file->getClientOriginalExtension());
+        if ($extension !== 'glb') {
+            throw ValidationException::withMessages([
+                'file' => ['ファイルの形式はGLBである必要があります。']
+            ]);
+        }
+
+        // ファイルの先頭バイトを確認（GLBファイルのマジックナンバー）
+        $handle = fopen($file->getRealPath(), 'rb');
+        $header = fread($handle, 4);
+        fclose($handle);
+
+        // GLBファイルのマジックナンバーを確認（0x46546C67）
+        if (bin2hex($header) !== '676c5446') {
+            throw ValidationException::withMessages([
+                'file' => ['無効なGLBファイル形式です。']
+            ]);
+        }
+
+        return true;
     }
 }
