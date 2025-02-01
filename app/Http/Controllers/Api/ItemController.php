@@ -7,6 +7,7 @@ use App\Models\Item;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 class ItemController extends Controller
 {
@@ -234,7 +235,56 @@ class ItemController extends Controller
      */
     public function destroy(string $id)
     {
-        //
+        try {
+            $item = Item::findOrFail($id);
+
+            // トランザクション開始
+            DB::beginTransaction();
+
+            try {
+                // 中間テーブルの関連データを削除
+                $item->rooms()->detach();
+
+                // S3からフォルダとその中身を全て削除
+                $s3ItemsRootPath = 'warehouse/';
+                $itemFolderPath = $s3ItemsRootPath . $item->user_id . '/' . $item->id;
+                $files = Storage::disk('s3')->allFiles($itemFolderPath);
+                Storage::disk('s3')->delete($files);
+
+                // アイテムを削除
+                $item->delete();
+
+                // トランザクションコミット
+                DB::commit();
+
+                Log::info('アイテム削除完了', [
+                    'item_id' => $id,
+                    'deleted_files' => $files
+                ]);
+
+                return response()->json([
+                    'message' => 'アイテムを削除しました'
+                ], 200);
+
+            } catch (\Exception $e) {
+                // エラー発生時はロールバック
+                DB::rollBack();
+                throw $e;
+            }
+
+        } catch (\Exception $e) {
+            Log::error('アイテム削除エラー', [
+                'error' => $e->getMessage(),
+                'item_id' => $id,
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return response()->json([
+                'message' => 'アイテムの削除に失敗しました',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
