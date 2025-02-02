@@ -29,7 +29,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::put('/room/update/{room_id}', [RoomController::class, 'update'])->name('room.update');
     Route::get('/room/studio/{room_id}', [RoomController::class, 'studio'])->name('room.studio');
     Route::get('/room/mainstage/{room_id}', [RoomController::class, 'mainstage'])->name('room.mainstage');
-
+    Route::post('/room/upload/thumbnail/{room_id}', [RoomController::class, 'uploadThumbnail'])->name('room.upload.thumbnail');
     Route::post('/room/comment/store/{room_id}', [RoomCommentController::class, 'store'])->name('room.comment.store');
     Route::delete('/room/comment/destroy/{room_comment_id}', [RoomCommentController::class, 'destroy'])->name('room.comment.destroy');
 
