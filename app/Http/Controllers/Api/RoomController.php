@@ -222,4 +222,9 @@ class RoomController extends Controller
             ], 500);
         }
     }
+
+    public function uploadThumbnail(Request $request, $room_id)
+    {
+        // サムネイルのアップロード
+    }
 }
