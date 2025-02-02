@@ -7,6 +7,7 @@ use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Models\ItemRoom;
+use Illuminate\Support\Facades\Storage;
 
 class RoomController extends Controller
 {
@@ -225,6 +226,61 @@ class RoomController extends Controller
 
     public function uploadThumbnail(Request $request, $room_id)
     {
-        // サムネイルのアップロード
+        try {
+
+            // 認証ユーザーのIDを取得
+            $userId = auth()->id();
+
+            // バリデーション
+            $request->validate([
+                'thumbnail' => 'required|image|max:5120',
+            ]);
+
+            $room = Room::findOrFail($room_id);
+
+            if ($request->hasFile('thumbnail')) {
+                // 古いサムネイル画像を削除
+                $oldPath = 'room/' . $userId . '/' . $room_id . '/thumbnail.png';
+                // ファイルの存在確認
+                $exists = Storage::disk('s3')->exists($oldPath);
+
+                if ($exists) {
+                    Storage::disk('s3')->delete($oldPath);
+                    Log::info('古いサムネイル削除完了', ['old_path' => $oldPath]);
+                }
+
+                // 新しいサムネイル画像を保存
+                $thumbnailFile = $request->file('thumbnail');
+                $path = 'room/' . $userId . '/' . $room_id;
+                $filename = 'thumbnail.' . $thumbnailFile->getClientOriginalExtension();
+
+                // S3にアップロード
+                $thumbnailFile->storeAs($path, $filename, 's3');
+
+
+                Log::info('ルームサムネイル更新完了', [
+                    'room_id' => $room_id,
+                    'new_thumbnail' => $filename
+                ]);
+
+                return response()->json([
+                    'message' => 'サムネイルを更新しました',
+                    'room' => $room
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('サムネイル更新エラー', [
+                'error' => $e->getMessage(),
+                'room_id' => $room_id,
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return response()->json([
+                'message' => 'サムネイルの更新に失敗しました',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
