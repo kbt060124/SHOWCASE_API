@@ -55,11 +55,6 @@ class User extends Authenticatable
         return $this->hasMany(Room::class);
     }
 
-    public function logs()
-    {
-        return $this->hasMany(Log::class);
-    }
-
     public function likeRooms()
     {
         return $this->belongsToMany(Room::class)->withTimestamps();
