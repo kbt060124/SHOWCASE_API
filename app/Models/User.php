@@ -17,7 +17,6 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $fillable = [
-        'name',
         'email',
         'password',
     ];
@@ -53,11 +52,6 @@ class User extends Authenticatable
     public function rooms()
     {
         return $this->hasMany(Room::class);
-    }
-
-    public function logs()
-    {
-        return $this->hasMany(Log::class);
     }
 
     public function likeRooms()

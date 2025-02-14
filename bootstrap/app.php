@@ -12,12 +12,20 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // APIルートグループ
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+            \App\Http\Middleware\LogUserActions::class,
+        ]);
+
+        // 認証ルートグループ
+        $middleware->group('auth_routes', [
+            \App\Http\Middleware\LogUserActions::class,
         ]);
 
         $middleware->alias([
             'verified' => \App\Http\Middleware\EnsureEmailIsVerified::class,
+            'log.user.actions' => \App\Http\Middleware\LogUserActions::class,
         ]);
 
         //
