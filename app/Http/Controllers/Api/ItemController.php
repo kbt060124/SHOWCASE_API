@@ -73,6 +73,10 @@ class ItemController extends Controller
                     [
                         'name' => 'tier',
                         'contents' => $request->input('tier', 'Sketch')
+                    ],
+                    [
+                        'name' => 'geometry_file_format',
+                        'contents' => 'glb'
                     ]
                 ]
             ]);
@@ -533,5 +537,127 @@ class ItemController extends Controller
         }
 
         return true;
+    }
+
+    public function downloadModel(Request $request)
+    {
+        try {
+            $request->validate([
+                'taskId' => 'required|string',
+            ]);
+
+            $client = new Client();
+            $rodinApiKey = env('RODIN_API_KEY');
+            $downloadEndpoint = 'https://hyperhuman.deemos.com/api/v2/download';
+
+            // リクエストの内容をログ出力
+            Log::info('Download request', [
+                'taskId' => $request->taskId
+            ]);
+
+            $response = $client->post($downloadEndpoint, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $rodinApiKey,
+                    'Content-Type' => 'application/json'
+                ],
+                'json' => [
+                    'task_uuid' => $request->taskId
+                ]
+            ]);
+
+            $result = json_decode($response->getBody()->getContents(), true);
+
+            // レスポンスの内容をログ出力
+            Log::info('Rodin download response', [
+                'response' => $result
+            ]);
+
+            if (isset($result['list']) && is_array($result['list'])) {
+                $downloadUrls = [];
+                foreach ($result['list'] as $file) {
+                    // ファイル名が.glbで終わるものを探す
+                    if (str_ends_with(strtolower($file['name']), '.glb')) {
+                        $downloadUrls[] = [
+                            'url' => $file['url'],
+                            'name' => $file['name']
+                        ];
+                    }
+                }
+
+                if (!empty($downloadUrls)) {
+                    return response()->json([
+                        'files' => $downloadUrls
+                    ]);
+                }
+            }
+
+            // ファイルが見つからない場合、ステータスを再確認
+            $statusEndpoint = 'https://hyperhuman.deemos.com/api/v2/status';
+            $statusResponse = $client->post($statusEndpoint, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $rodinApiKey,
+                    'Content-Type' => 'application/json'
+                ],
+                'json' => [
+                    'task_uuid' => $request->taskId
+                ]
+            ]);
+
+            $statusResult = json_decode($statusResponse->getBody()->getContents(), true);
+            Log::info('Status check during download', [
+                'status_response' => $statusResult
+            ]);
+
+            return response()->json([
+                'error' => 'ダウンロード可能なファイルが見つかりません',
+                'status' => $statusResult['status'] ?? 'Unknown',
+                'message' => $statusResult['message'] ?? null
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('Download Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'ダウンロードに失敗しました',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function proxyDownload(Request $request)
+    {
+        try {
+            $request->validate([
+                'url' => 'required|url',
+                'filename' => 'required|string'
+            ]);
+
+            $client = new Client();
+            $response = $client->get($request->url, [
+                'stream' => true,
+                'headers' => [
+                    'Accept' => 'application/octet-stream'
+                ]
+            ]);
+
+            return response()->streamDownload(function () use ($response) {
+                echo $response->getBody();
+            }, $request->filename, [
+                'Content-Type' => 'application/octet-stream',
+                'Content-Disposition' => 'attachment; filename="' . $request->filename . '"'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Proxy download error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'ファイルのダウンロードに失敗しました',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 }

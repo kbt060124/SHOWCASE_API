@@ -25,6 +25,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::put('/item/update/{item_id}', [ItemController::class, 'update'])->name('item.update');
     Route::post('/item/create-3d', [ItemController::class, 'create'])->name('item.create3D');
     Route::post('/item/check-status', [ItemController::class, 'checkStatus'])->name('item.checkStatus');
+    Route::post('/item/download-model', [ItemController::class, 'downloadModel'])->name('item.downloadModel');
+    Route::post('/item/proxy-download', [ItemController::class, 'proxyDownload'])->name('item.proxyDownload');
 
     Route::get('/room/{user_id}', [RoomController::class, 'index'])->name('room.index');
     Route::post('/room/create', [RoomController::class, 'create'])->name('room.create');
