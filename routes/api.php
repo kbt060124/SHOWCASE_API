@@ -23,6 +23,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/item/upload', [ItemController::class, 'store'])->name('item.store');
     Route::delete('/item/destroy/{item_id}', [ItemController::class, 'destroy'])->name('item.destroy');
     Route::put('/item/update/{item_id}', [ItemController::class, 'update'])->name('item.update');
+    Route::post('/item/create-3d', [ItemController::class, 'create'])->name('item.create3D');
+    Route::post('/item/check-status', [ItemController::class, 'checkStatus'])->name('item.checkStatus');
 
     Route::get('/room/{user_id}', [RoomController::class, 'index'])->name('room.index');
     Route::post('/room/create', [RoomController::class, 'create'])->name('room.create');

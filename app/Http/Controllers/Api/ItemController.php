@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+use GuzzleHttp\Client;
 
 class ItemController extends Controller
 {
@@ -23,9 +25,142 @@ class ItemController extends Controller
     /**
      * Show the form for creating a new resource.
      */
-    public function create()
+    public function create(Request $request)
     {
-        //
+        try {
+            // リクエストの内容をログ出力
+            Log::info('Received request', [
+                'has_file' => $request->hasFile('images'),
+                'content_type' => $request->header('Content-Type'),
+                'all_files' => $request->allFiles(),
+                'all_inputs' => $request->all()
+            ]);
+
+            // 画像のバリデーション
+            $request->validate([
+                'images' => 'required|file|image|max:10240', // 10MB制限
+                'tier' => 'required|string|in:Sketch,Regular'
+            ]);
+
+            // Rodin APIの設定
+            $client = new Client();
+            $rodinApiKey = env('RODIN_API_KEY');
+            $rodinEndpoint = 'https://hyperhuman.deemos.com/api/v2/rodin';
+
+            // 画像ファイルの準備
+            $image = $request->file('images');
+
+            Log::info('Preparing image file', [
+                'original_name' => $image->getClientOriginalName(),
+                'mime_type' => $image->getMimeType(),
+                'size' => $image->getSize()
+            ]);
+
+            // Rodin APIにリクエスト
+            $response = $client->post($rodinEndpoint, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $rodinApiKey,
+                ],
+                'multipart' => [
+                    [
+                        'name' => 'images',
+                        'contents' => fopen($image->getRealPath(), 'r'),
+                        'filename' => $image->getClientOriginalName(),
+                        'headers' => [
+                            'Content-Type' => $image->getMimeType()
+                        ]
+                    ],
+                    [
+                        'name' => 'tier',
+                        'contents' => $request->input('tier', 'Sketch')
+                    ]
+                ]
+            ]);
+
+            $result = json_decode($response->getBody()->getContents(), true);
+
+            Log::info('Rodin API Response', [
+                'response' => $result
+            ]);
+
+            // subscription_keyとuuidの両方を返す
+            return response()->json([
+                'taskId' => $result['uuid'],
+                'subscriptionKey' => $result['jobs']['subscription_key'],
+                'message' => '3Dモデル生成タスクを開始しました'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Rodin API Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => '3Dモデル生成の開始に失敗しました',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function checkStatus(Request $request)
+    {
+        try {
+            $request->validate([
+                'subscriptionKey' => 'required|string',
+            ]);
+
+            $client = new Client();
+            $rodinApiKey = env('RODIN_API_KEY');
+            $statusEndpoint = 'https://hyperhuman.deemos.com/api/v2/status';
+
+            // リクエストの内容をログ出力
+            Log::info('Status check request', [
+                'subscriptionKey' => $request->subscriptionKey
+            ]);
+
+            $response = $client->post($statusEndpoint, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $rodinApiKey,
+                    'Content-Type' => 'application/json'
+                ],
+                'json' => [
+                    'subscription_key' => $request->subscriptionKey
+                ]
+            ]);
+
+            $result = json_decode($response->getBody()->getContents(), true);
+
+            // レスポンスの内容をログ出力
+            Log::info('Rodin status response', [
+                'response' => $result
+            ]);
+
+            // jobsの配列から最初のジョブのステータスを取得
+            if (isset($result['jobs']) && is_array($result['jobs']) && count($result['jobs']) > 0) {
+                $jobStatus = $result['jobs'][0]['status'] ?? 'Unknown';
+                $jobMessage = $result['jobs'][0]['message'] ?? null;
+
+                return response()->json([
+                    'status' => $jobStatus,
+                    'message' => $jobMessage
+                ]);
+            }
+
+            return response()->json([
+                'status' => 'Unknown',
+                'message' => 'ステータス情報が取得できませんでした'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Status Check Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'ステータスチェックに失敗しました',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -80,8 +215,7 @@ class ItemController extends Controller
                     'memo' => $request->memo,
                     'totalsize' => $fileSize,
                     'thumbnail' => $thumbnailStoredFileName,
-                    'filename' => $glbStoredFileName,
-                    'totalsize' => $fileSize
+                    'filename' => $glbStoredFileName
                 ]);
 
                 // S3の保存先ディレクトリ
@@ -106,7 +240,6 @@ class ItemController extends Controller
                     'message' => 'アップロード成功',
                     'item' => $item
                 ], 201);
-
             } catch (\Exception $e) {
                 // エラーが発生した場合、作成したアイテムを削除
                 if (isset($item)) {
@@ -215,7 +348,6 @@ class ItemController extends Controller
                 'message' => 'アイテム情報を更新しました',
                 'item' => $item
             ]);
-
         } catch (\Exception $e) {
             Log::error('アイテム更新エラー', [
                 'error' => $e->getMessage(),
@@ -265,13 +397,11 @@ class ItemController extends Controller
                 return response()->json([
                     'message' => 'アイテムを削除しました'
                 ], 200);
-
             } catch (\Exception $e) {
                 // エラー発生時はロールバック
                 DB::rollBack();
                 throw $e;
             }
-
         } catch (\Exception $e) {
             Log::error('アイテム削除エラー', [
                 'error' => $e->getMessage(),
@@ -295,7 +425,7 @@ class ItemController extends Controller
         try {
             $this->logFileReceived($file);
             $filePath = $this->generateFilePath($file, $path);
-            $fileContents = $this->getFileContentes($file);
+            $fileContents = $this->getFileContents($file);
             $mimeType = $this->getMimeType($file);
             $result = $this->saveToS3($filePath, $fileContents, $mimeType);
 
@@ -336,7 +466,7 @@ class ItemController extends Controller
     /**
      * ファイルの内容を取得
      */
-    private function getFileContentes($file)
+    private function getFileContents($file)
     {
         return file_get_contents($file->getRealPath());
     }
