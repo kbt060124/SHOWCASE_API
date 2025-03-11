@@ -38,7 +38,8 @@ class ItemController extends Controller
 
             // 画像のバリデーション
             $request->validate([
-                'images' => 'required|file|image|max:10240', // 10MB制限
+                'images' => 'required|array|min:1|max:5',
+                'images.*' => 'required|file|image|max:10240', // 各画像10MB制限
                 'tier' => 'required|string|in:Sketch,Regular'
             ]);
 
@@ -47,45 +48,73 @@ class ItemController extends Controller
             $rodinApiKey = env('RODIN_API_KEY');
             $rodinEndpoint = 'https://hyperhuman.deemos.com/api/v2/rodin';
 
-            // 画像ファイルの準備
-            $image = $request->file('images');
+            // multipartデータの準備
+            $multipart = [
+                [
+                    'name' => 'condition_mode',
+                    'contents' => 'fuse'
+                ],
+                [
+                    'name' => 'tier',
+                    'contents' => $request->input('tier', 'Sketch')
+                ],
+                [
+                    'name' => 'geometry_file_format',
+                    'contents' => 'glb'
+                ]
+            ];
 
-            Log::info('Preparing image file', [
-                'original_name' => $image->getClientOriginalName(),
-                'mime_type' => $image->getMimeType(),
-                'size' => $image->getSize()
-            ]);
+            // 画像ファイルの追加
+            foreach ($request->file('images') as $image) {
+                Log::info('Preparing image file', [
+                    'original_name' => $image->getClientOriginalName(),
+                    'mime_type' => $image->getMimeType(),
+                    'size' => $image->getSize()
+                ]);
+
+                $multipart[] = [
+                    'name' => 'images',
+                    'contents' => fopen($image->getRealPath(), 'r'),
+                    'filename' => $image->getClientOriginalName(),
+                    'headers' => [
+                        'Content-Type' => $image->getMimeType()
+                    ]
+                ];
+            }
 
             // Rodin APIにリクエスト
             $response = $client->post($rodinEndpoint, [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $rodinApiKey,
                 ],
-                'multipart' => [
-                    [
-                        'name' => 'images',
-                        'contents' => fopen($image->getRealPath(), 'r'),
-                        'filename' => $image->getClientOriginalName(),
-                        'headers' => [
-                            'Content-Type' => $image->getMimeType()
-                        ]
-                    ],
-                    [
-                        'name' => 'tier',
-                        'contents' => $request->input('tier', 'Sketch')
-                    ],
-                    [
-                        'name' => 'geometry_file_format',
-                        'contents' => 'glb'
-                    ]
-                ]
+                'multipart' => $multipart
             ]);
 
-            $result = json_decode($response->getBody()->getContents(), true);
+            $responseBody = $response->getBody()->getContents();
+            Log::info('Raw Rodin API Response', [
+                'status' => $response->getStatusCode(),
+                'headers' => $response->getHeaders(),
+                'body' => $responseBody
+            ]);
 
-            Log::info('Rodin API Response', [
+            $result = json_decode($responseBody, true);
+
+            Log::info('Parsed Rodin API Response', [
                 'response' => $result
             ]);
+
+            // エラーチェック
+            if (isset($result['error']) && $result['error'] !== null) {
+                throw new \Exception($result['message'] ?? 'Unknown error from Rodin API');
+            }
+
+            // レスポンスの構造チェック
+            if (!isset($result['uuid']) || !isset($result['jobs']) || !isset($result['jobs']['subscription_key'])) {
+                Log::error('Invalid Rodin API response structure', [
+                    'response' => $result
+                ]);
+                throw new \Exception('Rodin APIからの予期しない応答形式です');
+            }
 
             // subscription_keyとuuidの両方を返す
             return response()->json([
