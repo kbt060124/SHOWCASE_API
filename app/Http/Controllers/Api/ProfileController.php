@@ -150,4 +150,27 @@ class ProfileController extends Controller
 
         return response()->json($users);
     }
+
+    public function searchAll()
+    {
+        try {
+            $users = User::with('profile')
+                ->inRandomOrder()
+                ->limit(20)
+                ->get();
+
+            return response()->json([
+                'users' => $users
+            ]);
+        } catch (\Exception $e) {
+            Log::error('ユーザー一覧取得エラー', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'message' => 'ユーザー一覧の取得に失敗しました',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
