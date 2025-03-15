@@ -21,6 +21,7 @@ Route::middleware(['auth_api'])->group(function () {
     Route::post('/item/upload', [ItemController::class, 'store'])->name('item.store');
     Route::delete('/item/destroy/{item_id}', [ItemController::class, 'destroy'])->name('item.destroy');
     Route::put('/item/update/{item_id}', [ItemController::class, 'update'])->name('item.update');
+    Route::post('/item/rodin-upload', [ItemController::class, 'rodinStore'])->name('item.rodinStore');
 
     Route::get('/room/{user_id}', [RoomController::class, 'index'])->name('room.index');
     Route::get('/room/studio/{room_id}', [RoomController::class, 'studio'])->name('room.studio');

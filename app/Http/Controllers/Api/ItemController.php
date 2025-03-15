@@ -404,4 +404,99 @@ class ItemController extends Controller
 
         return true;
     }
+
+    public function rodinStore(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'filename' => 'required|string',
+                'user_id' => 'required|integer',
+                'name' => 'required|string|max:255',
+                'thumbnail' => 'required|image|max:5120',
+            ]);
+
+            if ($request->hasFile('thumbnail')) {
+                try {
+                    // storageからglbファイルを取得
+                    $glbPath = Storage::disk('local')->path('public/generated_models/' . $request->filename);
+
+                    if (!file_exists($glbPath)) {
+                        throw new \Exception('GLBファイルが見つかりません');
+                    }
+
+                    // GLBファイルをアップロード用のファイルオブジェクトとして作成
+                    $glbFile = new \Illuminate\Http\UploadedFile(
+                        $glbPath,
+                        $request->filename,
+                        'application/octet-stream',
+                        null,
+                        true
+                    );
+
+                    $thumbnailFile = $request->file('thumbnail');
+
+                    // GLBファイルの検証
+                    $this->validateGlbFile($glbFile);
+
+                    // GLBファイルのサイズを取得
+                    $fileSize = filesize($glbPath);
+
+                    // データベースにアイテムを保存
+                    $item = Item::create([
+                        'user_id' => $request->user_id,
+                        'name' => $request->name,
+                        'memo' => $request->memo,
+                        'totalsize' => $fileSize,
+                        'thumbnail' => $thumbnailFile->getClientOriginalName(),
+                        'filename' => $request->filename
+                    ]);
+
+                    // S3の保存先ディレクトリ
+                    $s3ItemsRootPath = 'warehouse/';
+                    $path = $s3ItemsRootPath . $request->user_id . '/' . $item->id . '/';
+
+                    // GLBファイルの保存
+                    $glbErrorMessage = 'GLBファイルのアップロードに失敗しました';
+                    $glbStoredFilePath = $this->generateFilePath($glbFile, $path);
+                    $glbUrl = $this->saveFile($glbFile, $path, $glbErrorMessage);
+
+                    // サムネイル画像の保存
+                    $thumbnailErrorMessage = 'サムネイル画像のアップロードに失敗しました';
+                    $thumbnailStoredFilePath = $this->generateFilePath($thumbnailFile, $path);
+                    $thumbnailUrl = $this->saveFile($thumbnailFile, $path, $thumbnailErrorMessage);
+
+                    return response()->json([
+                        'message' => 'アップロード成功',
+                        'item' => $item
+                    ], 201);
+
+                } catch (\Exception $e) {
+                    if (isset($item)) {
+                        $item->delete();
+                    }
+
+                    Log::error('ファイルアップロードエラー詳細', [
+                        'error' => $e->getMessage(),
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+
+                    return response()->json([
+                        'message' => 'アップロード失敗',
+                        'error' => $e->getMessage()
+                    ], 500);
+                }
+            }
+
+            Log::error('必要なファイルが見つかりません');
+            return response()->json(['error' => '必要なファイルが見つかりません'], 400);
+        } catch (\Exception $e) {
+            Log::error('バリデーションエラー', [
+                'error' => $e->getMessage(),
+                'request_data' => $request->all()
+            ]);
+            throw $e;
+        }
+    }
 }
