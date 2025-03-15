@@ -14,6 +14,7 @@ Route::middleware(['auth_api'])->get('/user', function (Request $request) {
 
 Route::middleware(['auth_api'])->group(function () {
     Route::get('/profile/search', [ProfileController::class, 'search'])->name('profile.search');
+    Route::get('/profile/searchAll', [ProfileController::class, 'searchAll'])->name('profile.searchAll');
     Route::post('/profile/create/{user_id}', [ProfileController::class, 'store'])->name('profile.store');
     Route::put('/profile/update/{user_id}', [ProfileController::class, 'update'])->name('profile.update');
 
