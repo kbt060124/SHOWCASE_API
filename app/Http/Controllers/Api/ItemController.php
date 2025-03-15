@@ -52,7 +52,7 @@ class ItemController extends Controller
             $multipart = [
                 [
                     'name' => 'condition_mode',
-                    'contents' => 'fuse'
+                    'contents' => 'concat'
                 ],
                 [
                     'name' => 'tier',
