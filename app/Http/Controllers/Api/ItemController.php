@@ -602,21 +602,33 @@ class ItemController extends Controller
             ]);
 
             if (isset($result['list']) && is_array($result['list'])) {
-                $downloadUrls = [];
+                $glbFiles = [];
                 foreach ($result['list'] as $file) {
                     // ファイル名が.glbで終わるものを探す
                     if (str_ends_with(strtolower($file['name']), '.glb')) {
-                        $downloadUrls[] = [
+                        $glbFiles[] = [
                             'url' => $file['url'],
                             'name' => $file['name']
                         ];
                     }
                 }
 
-                if (!empty($downloadUrls)) {
-                    return response()->json([
-                        'files' => $downloadUrls
-                    ]);
+                if (!empty($glbFiles)) {
+                    // GLBファイルをStorageに保存
+                    $savedFiles = [];
+                    foreach ($glbFiles as $glbFile) {
+                        $savedFile = $this->saveGlbToStorage($glbFile['url'], $glbFile['name'], $request->taskId);
+                        if ($savedFile) {
+                            $savedFiles[] = $savedFile;
+                        }
+                    }
+
+                    if (!empty($savedFiles)) {
+                        return response()->json([
+                            'message' => 'GLBファイルの保存が完了しました',
+                            'files' => $savedFiles
+                        ]);
+                    }
                 }
             }
 
@@ -655,38 +667,41 @@ class ItemController extends Controller
         }
     }
 
-    public function proxyDownload(Request $request)
+    /**
+     * GLBファイルをStorageに保存する
+     */
+    private function saveGlbToStorage($url, $filename, $taskId)
     {
         try {
-            $request->validate([
-                'url' => 'required|url',
-                'filename' => 'required|string'
-            ]);
-
             $client = new Client();
-            $response = $client->get($request->url, [
+            $response = $client->get($url, [
                 'stream' => true,
                 'headers' => [
                     'Accept' => 'application/octet-stream'
                 ]
             ]);
 
-            return response()->streamDownload(function () use ($response) {
-                echo $response->getBody();
-            }, $request->filename, [
-                'Content-Type' => 'application/octet-stream',
-                'Content-Disposition' => 'attachment; filename="' . $request->filename . '"'
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Proxy download error', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            // ファイル名の重複を避けるため、タスクIDをプレフィックスとして付与
+            $uniqueFilename = "{$taskId}_{$filename}";
+            // 保存先のパスを生成（generated_models直下に保存）
+            $storagePath = "generated_models/{$uniqueFilename}";
 
-            return response()->json([
-                'error' => 'ファイルのダウンロードに失敗しました',
-                'message' => $e->getMessage()
-            ], 500);
+            // ストリームとしてファイルを保存
+            Storage::put($storagePath, $response->getBody()->getContents());
+
+            return [
+                'name' => $filename,
+                'path' => $storagePath,
+                'url' => Storage::url($storagePath)
+            ];
+        } catch (\Exception $e) {
+            Log::error('GLB file save error', [
+                'error' => $e->getMessage(),
+                'url' => $url,
+                'filename' => $filename,
+                'taskId' => $taskId
+            ]);
+            return null;
         }
     }
 }
