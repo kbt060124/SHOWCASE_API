@@ -704,4 +704,36 @@ class ItemController extends Controller
             return null;
         }
     }
+
+    /**
+     * GLBファイルをバイナリデータとして返す
+     */
+    public function previewModel($filename)
+    {
+        try {
+            $path = "generated_models/{$filename}";
+
+            if (!Storage::exists($path)) {
+                return response()->json([
+                    'error' => 'ファイルが見つかりません'
+                ], 404);
+            }
+
+            $content = Storage::get($path);
+
+            return response($content)
+                ->header('Content-Type', 'model/gltf-binary')
+                ->header('Content-Disposition', 'inline; filename="' . $filename . '"');
+        } catch (\Exception $e) {
+            Log::error('Preview Error', [
+                'error' => $e->getMessage(),
+                'filename' => $filename
+            ]);
+
+            return response()->json([
+                'error' => 'プレビューの取得に失敗しました',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

@@ -27,6 +27,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/item/check-status', [ItemController::class, 'checkStatus'])->name('item.checkStatus');
     Route::post('/item/download-model', [ItemController::class, 'downloadModel'])->name('item.downloadModel');
     Route::post('/item/proxy-download', [ItemController::class, 'proxyDownload'])->name('item.proxyDownload');
+    Route::get('/item/preview-model/{filename}', [ItemController::class, 'previewModel'])->name('item.previewModel');
 
     Route::get('/room/{user_id}', [RoomController::class, 'index'])->name('room.index');
     Route::post('/room/create', [RoomController::class, 'create'])->name('room.create');
