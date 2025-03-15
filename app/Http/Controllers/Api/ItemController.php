@@ -135,6 +135,9 @@ class ItemController extends Controller
         }
     }
 
+    /**
+     * Rodinのタスクのステータスを確認する
+     */
     public function checkStatus(Request $request)
     {
         try {
@@ -191,6 +194,178 @@ class ItemController extends Controller
 
             return response()->json([
                 'error' => 'ステータスチェックに失敗しました',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * RodinでGLBファイルのダウンロードURLを生成する
+     */
+    public function downloadModel(Request $request)
+    {
+        try {
+            $request->validate([
+                'taskId' => 'required|string',
+            ]);
+
+            $client = new Client();
+            $rodinApiKey = env('RODIN_API_KEY');
+            $downloadEndpoint = 'https://hyperhuman.deemos.com/api/v2/download';
+
+            // リクエストの内容をログ出力
+            Log::info('Download request', [
+                'taskId' => $request->taskId
+            ]);
+
+            $response = $client->post($downloadEndpoint, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $rodinApiKey,
+                    'Content-Type' => 'application/json'
+                ],
+                'json' => [
+                    'task_uuid' => $request->taskId
+                ]
+            ]);
+
+            $result = json_decode($response->getBody()->getContents(), true);
+
+            // レスポンスの内容をログ出力
+            Log::info('Rodin download response', [
+                'response' => $result
+            ]);
+
+            if (isset($result['list']) && is_array($result['list'])) {
+                $glbFiles = [];
+                foreach ($result['list'] as $file) {
+                    // ファイル名が.glbで終わるものを探す
+                    if (str_ends_with(strtolower($file['name']), '.glb')) {
+                        $glbFiles[] = [
+                            'url' => $file['url'],
+                            'name' => $file['name']
+                        ];
+                    }
+                }
+
+                if (!empty($glbFiles)) {
+                    // GLBファイルをStorageに保存
+                    $savedFiles = [];
+                    foreach ($glbFiles as $glbFile) {
+                        $savedFile = $this->saveGlbToStorage($glbFile['url'], $glbFile['name'], $request->taskId);
+                        if ($savedFile) {
+                            $savedFiles[] = $savedFile;
+                        }
+                    }
+
+                    if (!empty($savedFiles)) {
+                        return response()->json([
+                            'message' => 'GLBファイルの保存が完了しました',
+                            'files' => $savedFiles
+                        ]);
+                    }
+                }
+            }
+
+            // ファイルが見つからない場合、ステータスを再確認
+            $statusEndpoint = 'https://hyperhuman.deemos.com/api/v2/status';
+            $statusResponse = $client->post($statusEndpoint, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $rodinApiKey,
+                    'Content-Type' => 'application/json'
+                ],
+                'json' => [
+                    'task_uuid' => $request->taskId
+                ]
+            ]);
+
+            $statusResult = json_decode($statusResponse->getBody()->getContents(), true);
+            Log::info('Status check during download', [
+                'status_response' => $statusResult
+            ]);
+
+            return response()->json([
+                'error' => 'ダウンロード可能なファイルが見つかりません',
+                'status' => $statusResult['status'] ?? 'Unknown',
+                'message' => $statusResult['message'] ?? null
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('Download Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'ダウンロードに失敗しました',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * GLBファイルをStorageに保存する
+     */
+    private function saveGlbToStorage($url, $filename, $taskId)
+    {
+        try {
+            $client = new Client();
+            $response = $client->get($url, [
+                'stream' => true,
+                'headers' => [
+                    'Accept' => 'application/octet-stream'
+                ]
+            ]);
+
+            // ファイル名の重複を避けるため、タスクIDをプレフィックスとして付与
+            $uniqueFilename = "{$taskId}_{$filename}";
+            // 保存先のパスを生成（generated_models直下に保存）
+            $storagePath = "generated_models/{$uniqueFilename}";
+
+            // ストリームとしてファイルを保存
+            Storage::put($storagePath, $response->getBody()->getContents());
+
+            return [
+                'name' => $filename,
+                'path' => $storagePath,
+                'url' => Storage::url($storagePath)
+            ];
+        } catch (\Exception $e) {
+            Log::error('GLB file save error', [
+                'error' => $e->getMessage(),
+                'url' => $url,
+                'filename' => $filename,
+                'taskId' => $taskId
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * GLBファイルをバイナリデータとして返す
+     */
+    public function previewModel($filename)
+    {
+        try {
+            $path = "generated_models/{$filename}";
+
+            if (!Storage::exists($path)) {
+                return response()->json([
+                    'error' => 'ファイルが見つかりません'
+                ], 404);
+            }
+
+            $content = Storage::get($path);
+
+            return response($content)
+                ->header('Content-Type', 'model/gltf-binary')
+                ->header('Content-Disposition', 'inline; filename="' . $filename . '"');
+        } catch (\Exception $e) {
+            Log::error('Preview Error', [
+                'error' => $e->getMessage(),
+                'filename' => $filename
+            ]);
+
+            return response()->json([
+                'error' => 'プレビューの取得に失敗しました',
                 'message' => $e->getMessage()
             ], 500);
         }
@@ -566,174 +741,5 @@ class ItemController extends Controller
         }
 
         return true;
-    }
-
-    public function downloadModel(Request $request)
-    {
-        try {
-            $request->validate([
-                'taskId' => 'required|string',
-            ]);
-
-            $client = new Client();
-            $rodinApiKey = env('RODIN_API_KEY');
-            $downloadEndpoint = 'https://hyperhuman.deemos.com/api/v2/download';
-
-            // リクエストの内容をログ出力
-            Log::info('Download request', [
-                'taskId' => $request->taskId
-            ]);
-
-            $response = $client->post($downloadEndpoint, [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $rodinApiKey,
-                    'Content-Type' => 'application/json'
-                ],
-                'json' => [
-                    'task_uuid' => $request->taskId
-                ]
-            ]);
-
-            $result = json_decode($response->getBody()->getContents(), true);
-
-            // レスポンスの内容をログ出力
-            Log::info('Rodin download response', [
-                'response' => $result
-            ]);
-
-            if (isset($result['list']) && is_array($result['list'])) {
-                $glbFiles = [];
-                foreach ($result['list'] as $file) {
-                    // ファイル名が.glbで終わるものを探す
-                    if (str_ends_with(strtolower($file['name']), '.glb')) {
-                        $glbFiles[] = [
-                            'url' => $file['url'],
-                            'name' => $file['name']
-                        ];
-                    }
-                }
-
-                if (!empty($glbFiles)) {
-                    // GLBファイルをStorageに保存
-                    $savedFiles = [];
-                    foreach ($glbFiles as $glbFile) {
-                        $savedFile = $this->saveGlbToStorage($glbFile['url'], $glbFile['name'], $request->taskId);
-                        if ($savedFile) {
-                            $savedFiles[] = $savedFile;
-                        }
-                    }
-
-                    if (!empty($savedFiles)) {
-                        return response()->json([
-                            'message' => 'GLBファイルの保存が完了しました',
-                            'files' => $savedFiles
-                        ]);
-                    }
-                }
-            }
-
-            // ファイルが見つからない場合、ステータスを再確認
-            $statusEndpoint = 'https://hyperhuman.deemos.com/api/v2/status';
-            $statusResponse = $client->post($statusEndpoint, [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $rodinApiKey,
-                    'Content-Type' => 'application/json'
-                ],
-                'json' => [
-                    'task_uuid' => $request->taskId
-                ]
-            ]);
-
-            $statusResult = json_decode($statusResponse->getBody()->getContents(), true);
-            Log::info('Status check during download', [
-                'status_response' => $statusResult
-            ]);
-
-            return response()->json([
-                'error' => 'ダウンロード可能なファイルが見つかりません',
-                'status' => $statusResult['status'] ?? 'Unknown',
-                'message' => $statusResult['message'] ?? null
-            ], 404);
-        } catch (\Exception $e) {
-            Log::error('Download Error', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'error' => 'ダウンロードに失敗しました',
-                'message' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * GLBファイルをStorageに保存する
-     */
-    private function saveGlbToStorage($url, $filename, $taskId)
-    {
-        try {
-            $client = new Client();
-            $response = $client->get($url, [
-                'stream' => true,
-                'headers' => [
-                    'Accept' => 'application/octet-stream'
-                ]
-            ]);
-
-            // ファイル名の重複を避けるため、タスクIDをプレフィックスとして付与
-            $uniqueFilename = "{$taskId}_{$filename}";
-            // 保存先のパスを生成（generated_models直下に保存）
-            $storagePath = "generated_models/{$uniqueFilename}";
-
-            // ストリームとしてファイルを保存
-            Storage::put($storagePath, $response->getBody()->getContents());
-
-            return [
-                'name' => $filename,
-                'path' => $storagePath,
-                'url' => Storage::url($storagePath)
-            ];
-        } catch (\Exception $e) {
-            Log::error('GLB file save error', [
-                'error' => $e->getMessage(),
-                'url' => $url,
-                'filename' => $filename,
-                'taskId' => $taskId
-            ]);
-            return null;
-        }
-    }
-
-    /**
-     * GLBファイルをバイナリデータとして返す
-     */
-    public function previewModel($filename)
-    {
-        try {
-            $path = "generated_models/{$filename}";
-
-            if (!Storage::exists($path)) {
-                return response()->json([
-                    'error' => 'ファイルが見つかりません'
-                ], 404);
-            }
-
-            $content = Storage::get($path);
-
-            return response($content)
-                ->header('Content-Type', 'model/gltf-binary')
-                ->header('Content-Disposition', 'inline; filename="' . $filename . '"');
-        } catch (\Exception $e) {
-            Log::error('Preview Error', [
-                'error' => $e->getMessage(),
-                'filename' => $filename
-            ]);
-
-            return response()->json([
-                'error' => 'プレビューの取得に失敗しました',
-                'message' => $e->getMessage()
-            ], 500);
-        }
     }
 }
