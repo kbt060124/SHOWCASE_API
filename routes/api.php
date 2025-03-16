@@ -23,7 +23,6 @@ Route::middleware(['auth_api'])->group(function () {
     Route::put('/item/update/{item_id}', [ItemController::class, 'update'])->name('item.update');
     Route::post('/item/create-3d', [ItemController::class, 'create'])->name('item.create3D');
     Route::post('/item/check-status', [ItemController::class, 'checkStatus'])->name('item.checkStatus');
-    Route::post('/item/download-model', [ItemController::class, 'downloadModel'])->name('item.downloadModel');
     Route::post('/item/proxy-download', [ItemController::class, 'proxyDownload'])->name('item.proxyDownload');
     Route::get('/item/preview-model/{filename}', [ItemController::class, 'previewModel'])->name('item.previewModel');
     Route::post('/item/rodin-upload', [ItemController::class, 'rodinStore'])->name('item.rodinStore');
