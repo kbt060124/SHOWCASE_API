@@ -72,14 +72,20 @@ class ItemController extends Controller
                     'size' => $image->getSize()
                 ]);
 
+                // 背景削除処理
+                $processedImage = $this->removeBackground($image);
+
                 $multipart[] = [
                     'name' => 'images',
-                    'contents' => fopen($image->getRealPath(), 'r'),
-                    'filename' => $image->getClientOriginalName(),
+                    'contents' => fopen($processedImage->getRealPath(), 'r'),
+                    'filename' => $processedImage->getClientOriginalName(),
                     'headers' => [
-                        'Content-Type' => $image->getMimeType()
+                        'Content-Type' => $processedImage->getMimeType()
                     ]
                 ];
+
+                // 一時ファイルを削除
+                unlink($processedImage->getRealPath());
             }
 
             // Rodin APIにリクエスト
@@ -779,6 +785,55 @@ class ItemController extends Controller
                 'request_data' => $request->all()
             ]);
             throw $e;
+        }
+    }
+
+    private function removeBackground($imageFile)
+    {
+        try {
+            $client = new Client();
+            $apiKey = env('PHOTOROOM_API_KEY');
+            $endpoint = 'https://sdk.photoroom.com/v1/segment';
+
+            // multipartリクエストの準備
+            $response = $client->post($endpoint, [
+                'headers' => [
+                    'Accept' => 'image/png, application/json',
+                    'x-api-key' => $apiKey
+                ],
+                'multipart' => [
+                    [
+                        'name' => 'image_file',
+                        'contents' => fopen($imageFile->getRealPath(), 'r'),
+                        'filename' => $imageFile->getClientOriginalName()
+                    ]
+                ]
+            ]);
+
+            // 一時ファイルとして保存
+            $tempPath = storage_path('app/temp/' . uniqid() . '.png');
+            if (!file_exists(dirname($tempPath))) {
+                mkdir(dirname($tempPath), 0777, true);
+            }
+
+            file_put_contents($tempPath, $response->getBody());
+
+            // 処理された画像をアップロードファイルとして返す
+            return new \Illuminate\Http\UploadedFile(
+                $tempPath,
+                pathinfo($imageFile->getClientOriginalName(), PATHINFO_FILENAME) . '_removed_bg.png',
+                'image/png',
+                null,
+                true
+            );
+
+        } catch (\Exception $e) {
+            Log::error('背景削除処理エラー', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            throw new \Exception('画像の背景削除処理に失敗しました: ' . $e->getMessage());
         }
     }
 }
