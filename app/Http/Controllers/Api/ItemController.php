@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+use GuzzleHttp\Client;
 
 class ItemController extends Controller
 {
@@ -23,9 +25,295 @@ class ItemController extends Controller
     /**
      * Show the form for creating a new resource.
      */
-    public function create()
+    public function create(Request $request)
     {
-        //
+        try {
+            // リクエストの内容をログ出力
+            Log::info('Received request', [
+                'has_file' => $request->hasFile('images'),
+                'content_type' => $request->header('Content-Type'),
+                'all_files' => $request->allFiles(),
+                'all_inputs' => $request->all()
+            ]);
+
+            // 画像のバリデーション
+            $request->validate([
+                'images' => 'required|array|min:1|max:5',
+                'images.*' => 'required|file|image|max:10240', // 各画像10MB制限
+                'tier' => 'required|string|in:Sketch,Regular'
+            ]);
+
+            // Rodin APIの設定
+            $client = new Client();
+            $rodinApiKey = env('RODIN_API_KEY');
+            $rodinEndpoint = 'https://hyperhuman.deemos.com/api/v2/rodin';
+
+            // multipartデータの準備
+            $multipart = [
+                [
+                    'name' => 'condition_mode',
+                    'contents' => 'concat'
+                ],
+                [
+                    'name' => 'tier',
+                    'contents' => $request->input('tier', 'Sketch')
+                ],
+                [
+                    'name' => 'geometry_file_format',
+                    'contents' => 'glb'
+                ]
+            ];
+
+            // 画像ファイルの追加
+            foreach ($request->file('images') as $image) {
+                Log::info('Preparing image file', [
+                    'original_name' => $image->getClientOriginalName(),
+                    'mime_type' => $image->getMimeType(),
+                    'size' => $image->getSize()
+                ]);
+
+                $multipart[] = [
+                    'name' => 'images',
+                    'contents' => fopen($image->getRealPath(), 'r'),
+                    'filename' => $image->getClientOriginalName(),
+                    'headers' => [
+                        'Content-Type' => $image->getMimeType()
+                    ]
+                ];
+            }
+
+            // Rodin APIにリクエスト
+            $response = $client->post($rodinEndpoint, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $rodinApiKey,
+                ],
+                'multipart' => $multipart
+            ]);
+
+            $responseBody = $response->getBody()->getContents();
+            Log::info('Raw Rodin API Response', [
+                'status' => $response->getStatusCode(),
+                'headers' => $response->getHeaders(),
+                'body' => $responseBody
+            ]);
+
+            $result = json_decode($responseBody, true);
+
+            Log::info('Parsed Rodin API Response', [
+                'response' => $result
+            ]);
+
+            // エラーチェック
+            if (isset($result['error']) && $result['error'] !== null) {
+                throw new \Exception($result['message'] ?? 'Unknown error from Rodin API');
+            }
+
+            // レスポンスの構造チェック
+            if (!isset($result['uuid']) || !isset($result['jobs']) || !isset($result['jobs']['subscription_key'])) {
+                Log::error('Invalid Rodin API response structure', [
+                    'response' => $result
+                ]);
+                throw new \Exception('Rodin APIからの予期しない応答形式です');
+            }
+
+            // subscription_keyとuuidの両方を返す
+            return response()->json([
+                'taskId' => $result['uuid'],
+                'subscriptionKey' => $result['jobs']['subscription_key'],
+                'message' => '3Dモデル生成タスクを開始しました'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Rodin API Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => '3Dモデル生成の開始に失敗しました',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Rodinのタスクのステータスを確認する
+     */
+    public function checkStatus(Request $request)
+    {
+        try {
+            $request->validate([
+                'subscriptionKey' => 'required|string',
+                'taskId' => 'required|string',
+            ]);
+
+            $client = new Client();
+            $rodinApiKey = env('RODIN_API_KEY');
+            $statusEndpoint = 'https://hyperhuman.deemos.com/api/v2/status';
+
+            // ステータスチェック
+            $response = $client->post($statusEndpoint, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $rodinApiKey,
+                    'Content-Type' => 'application/json'
+                ],
+                'json' => [
+                    'subscription_key' => $request->subscriptionKey
+                ]
+            ]);
+
+            $result = json_decode($response->getBody()->getContents(), true);
+            Log::info('Rodin status response', ['response' => $result]);
+
+            if (isset($result['jobs']) && is_array($result['jobs']) && count($result['jobs']) > 0) {
+                $jobStatus = $result['jobs'][0]['status'] ?? 'Unknown';
+                $jobMessage = $result['jobs'][0]['message'] ?? null;
+
+                // ステータスがDoneの場合、ファイルの存在を確認
+                if ($jobStatus === 'Done') {
+                    try {
+                        // ダウンロードURLを取得
+                        $downloadEndpoint = 'https://hyperhuman.deemos.com/api/v2/download';
+                        $downloadResponse = $client->post($downloadEndpoint, [
+                            'headers' => [
+                                'Authorization' => 'Bearer ' . $rodinApiKey,
+                                'Content-Type' => 'application/json'
+                            ],
+                            'json' => [
+                                'task_uuid' => $request->taskId
+                            ]
+                        ]);
+
+                        $downloadResult = json_decode($downloadResponse->getBody()->getContents(), true);
+
+                        if (isset($downloadResult['list']) && is_array($downloadResult['list'])) {
+                            $glbFiles = [];
+                            foreach ($downloadResult['list'] as $file) {
+                                if (str_ends_with(strtolower($file['name']), '.glb')) {
+                                    // GLBファイルをStorageに保存
+                                    $savedFile = $this->saveGlbToStorage($file['url'], $file['name'], $request->taskId);
+                                    if ($savedFile) {
+                                        $glbFiles[] = $savedFile;
+                                    }
+                                }
+                            }
+
+                            if (!empty($glbFiles)) {
+                                return response()->json([
+                                    'status' => 'Done',
+                                    'message' => 'ファイルの生成が完了しました',
+                                    'downloadUrls' => $glbFiles
+                                ]);
+                            }
+                        }
+
+                        // ファイルが見つからない場合は処理中として扱う
+                        return response()->json([
+                            'status' => 'Processing',
+                            'message' => 'ファイルを生成中です'
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('Download check error', [
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString()
+                        ]);
+                        return response()->json([
+                            'status' => 'Processing',
+                            'message' => 'ファイルの確認中にエラーが発生しました'
+                        ]);
+                    }
+                }
+
+                return response()->json([
+                    'status' => $jobStatus,
+                    'message' => $jobMessage
+                ]);
+            }
+
+            return response()->json([
+                'status' => 'Unknown',
+                'message' => 'ステータス情報が取得できませんでした'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Status Check Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'ステータスチェックに失敗しました',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * GLBファイルをStorageに保存する
+     */
+    private function saveGlbToStorage($url, $filename, $taskId)
+    {
+        try {
+            $client = new Client();
+            $response = $client->get($url, [
+                'stream' => true,
+                'headers' => [
+                    'Accept' => 'application/octet-stream'
+                ]
+            ]);
+
+            // ファイル名の重複を避けるため、タスクIDをプレフィックスとして付与
+            $uniqueFilename = "{$taskId}_{$filename}";
+            // 保存先のパスを生成（public/generated_models直下に保存）
+            $storagePath = "public/generated_models/{$uniqueFilename}";
+
+            // ストリームとしてファイルを保存
+            Storage::put($storagePath, $response->getBody()->getContents());
+
+            return [
+                'name' => $filename,
+                'path' => $storagePath,
+                'url' => Storage::url($storagePath)
+            ];
+        } catch (\Exception $e) {
+            Log::error('GLB file save error', [
+                'error' => $e->getMessage(),
+                'url' => $url,
+                'filename' => $filename,
+                'taskId' => $taskId
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * GLBファイルをバイナリデータとして返す
+     */
+    public function previewModel($filename)
+    {
+        try {
+            $path = "public/generated_models/{$filename}";
+
+            if (!Storage::exists($path)) {
+                return response()->json([
+                    'error' => 'ファイルが見つかりません'
+                ], 404);
+            }
+
+            $content = Storage::get($path);
+
+            return response($content)
+                ->header('Content-Type', 'model/gltf-binary')
+                ->header('Content-Disposition', 'inline; filename="' . $filename . '"');
+        } catch (\Exception $e) {
+            Log::error('Preview Error', [
+                'error' => $e->getMessage(),
+                'filename' => $filename
+            ]);
+
+            return response()->json([
+                'error' => 'プレビューの取得に失敗しました',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -80,8 +368,7 @@ class ItemController extends Controller
                     'memo' => $request->memo,
                     'totalsize' => $fileSize,
                     'thumbnail' => $thumbnailStoredFileName,
-                    'filename' => $glbStoredFileName,
-                    'totalsize' => $fileSize
+                    'filename' => $glbStoredFileName
                 ]);
 
                 // S3の保存先ディレクトリ
@@ -106,7 +393,6 @@ class ItemController extends Controller
                     'message' => 'アップロード成功',
                     'item' => $item
                 ], 201);
-
             } catch (\Exception $e) {
                 // エラーが発生した場合、作成したアイテムを削除
                 if (isset($item)) {
@@ -215,7 +501,6 @@ class ItemController extends Controller
                 'message' => 'アイテム情報を更新しました',
                 'item' => $item
             ]);
-
         } catch (\Exception $e) {
             Log::error('アイテム更新エラー', [
                 'error' => $e->getMessage(),
@@ -265,13 +550,11 @@ class ItemController extends Controller
                 return response()->json([
                     'message' => 'アイテムを削除しました'
                 ], 200);
-
             } catch (\Exception $e) {
                 // エラー発生時はロールバック
                 DB::rollBack();
                 throw $e;
             }
-
         } catch (\Exception $e) {
             Log::error('アイテム削除エラー', [
                 'error' => $e->getMessage(),
@@ -295,7 +578,7 @@ class ItemController extends Controller
         try {
             $this->logFileReceived($file);
             $filePath = $this->generateFilePath($file, $path);
-            $fileContents = $this->getFileContentes($file);
+            $fileContents = $this->getFileContents($file);
             $mimeType = $this->getMimeType($file);
             $result = $this->saveToS3($filePath, $fileContents, $mimeType);
 
@@ -336,7 +619,7 @@ class ItemController extends Controller
     /**
      * ファイルの内容を取得
      */
-    private function getFileContentes($file)
+    private function getFileContents($file)
     {
         return file_get_contents($file->getRealPath());
     }
@@ -469,7 +752,6 @@ class ItemController extends Controller
                         'message' => 'アップロード成功',
                         'item' => $item
                     ], 201);
-
                 } catch (\Exception $e) {
                     if (isset($item)) {
                         $item->delete();
