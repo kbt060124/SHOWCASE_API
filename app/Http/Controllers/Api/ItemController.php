@@ -72,14 +72,20 @@ class ItemController extends Controller
                     'size' => $image->getSize()
                 ]);
 
+                // 背景削除処理
+                $processedImage = $this->removeBackground($image);
+
                 $multipart[] = [
                     'name' => 'images',
-                    'contents' => fopen($image->getRealPath(), 'r'),
-                    'filename' => $image->getClientOriginalName(),
+                    'contents' => fopen($processedImage->getRealPath(), 'r'),
+                    'filename' => $processedImage->getClientOriginalName(),
                     'headers' => [
-                        'Content-Type' => $image->getMimeType()
+                        'Content-Type' => $processedImage->getMimeType()
                     ]
                 ];
+
+                // 一時ファイルを削除
+                unlink($processedImage->getRealPath());
             }
 
             // Rodin APIにリクエスト
@@ -143,17 +149,14 @@ class ItemController extends Controller
         try {
             $request->validate([
                 'subscriptionKey' => 'required|string',
+                'taskId' => 'required|string',
             ]);
 
             $client = new Client();
             $rodinApiKey = env('RODIN_API_KEY');
             $statusEndpoint = 'https://hyperhuman.deemos.com/api/v2/status';
 
-            // リクエストの内容をログ出力
-            Log::info('Status check request', [
-                'subscriptionKey' => $request->subscriptionKey
-            ]);
-
+            // ステータスチェック
             $response = $client->post($statusEndpoint, [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $rodinApiKey,
@@ -165,16 +168,66 @@ class ItemController extends Controller
             ]);
 
             $result = json_decode($response->getBody()->getContents(), true);
+            Log::info('Rodin status response', ['response' => $result]);
 
-            // レスポンスの内容をログ出力
-            Log::info('Rodin status response', [
-                'response' => $result
-            ]);
-
-            // jobsの配列から最初のジョブのステータスを取得
             if (isset($result['jobs']) && is_array($result['jobs']) && count($result['jobs']) > 0) {
                 $jobStatus = $result['jobs'][0]['status'] ?? 'Unknown';
                 $jobMessage = $result['jobs'][0]['message'] ?? null;
+
+                // ステータスがDoneの場合、ファイルの存在を確認
+                if ($jobStatus === 'Done') {
+                    try {
+                        // ダウンロードURLを取得
+                        $downloadEndpoint = 'https://hyperhuman.deemos.com/api/v2/download';
+                        $downloadResponse = $client->post($downloadEndpoint, [
+                            'headers' => [
+                                'Authorization' => 'Bearer ' . $rodinApiKey,
+                                'Content-Type' => 'application/json'
+                            ],
+                            'json' => [
+                                'task_uuid' => $request->taskId
+                            ]
+                        ]);
+
+                        $downloadResult = json_decode($downloadResponse->getBody()->getContents(), true);
+
+                        if (isset($downloadResult['list']) && is_array($downloadResult['list'])) {
+                            $glbFiles = [];
+                            foreach ($downloadResult['list'] as $file) {
+                                if (str_ends_with(strtolower($file['name']), '.glb')) {
+                                    // GLBファイルをStorageに保存
+                                    $savedFile = $this->saveGlbToStorage($file['url'], $file['name'], $request->taskId);
+                                    if ($savedFile) {
+                                        $glbFiles[] = $savedFile;
+                                    }
+                                }
+                            }
+
+                            if (!empty($glbFiles)) {
+                                return response()->json([
+                                    'status' => 'Done',
+                                    'message' => 'ファイルの生成が完了しました',
+                                    'downloadUrls' => $glbFiles
+                                ]);
+                            }
+                        }
+
+                        // ファイルが見つからない場合は処理中として扱う
+                        return response()->json([
+                            'status' => 'Processing',
+                            'message' => 'ファイルを生成中です'
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('Download check error', [
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString()
+                        ]);
+                        return response()->json([
+                            'status' => 'Processing',
+                            'message' => 'ファイルの確認中にエラーが発生しました'
+                        ]);
+                    }
+                }
 
                 return response()->json([
                     'status' => $jobStatus,
@@ -741,5 +794,148 @@ class ItemController extends Controller
         }
 
         return true;
+    }
+
+    public function rodinStore(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'filename' => 'required|string',
+                'user_id' => 'required|integer',
+                'name' => 'required|string|max:255',
+                'thumbnail' => 'required|image|max:5120',
+            ]);
+
+            if ($request->hasFile('thumbnail')) {
+                try {
+                    // storageからglbファイルを取得
+                    $glbPath = Storage::disk('local')->path('public/generated_models/' . $request->filename);
+
+                    if (!file_exists($glbPath)) {
+                        throw new \Exception('GLBファイルが見つかりません');
+                    }
+
+                    // GLBファイルをアップロード用のファイルオブジェクトとして作成
+                    $glbFile = new \Illuminate\Http\UploadedFile(
+                        $glbPath,
+                        $request->filename,
+                        'application/octet-stream',
+                        null,
+                        true
+                    );
+
+                    $thumbnailFile = $request->file('thumbnail');
+
+                    // GLBファイルの検証
+                    $this->validateGlbFile($glbFile);
+
+                    // GLBファイルのサイズを取得
+                    $fileSize = filesize($glbPath);
+
+                    // データベースにアイテムを保存
+                    $item = Item::create([
+                        'user_id' => $request->user_id,
+                        'name' => $request->name,
+                        'memo' => $request->memo,
+                        'totalsize' => $fileSize,
+                        'thumbnail' => $thumbnailFile->getClientOriginalName(),
+                        'filename' => $request->filename
+                    ]);
+
+                    // S3の保存先ディレクトリ
+                    $s3ItemsRootPath = 'warehouse/';
+                    $path = $s3ItemsRootPath . $request->user_id . '/' . $item->id . '/';
+
+                    // GLBファイルの保存
+                    $glbErrorMessage = 'GLBファイルのアップロードに失敗しました';
+                    $glbStoredFilePath = $this->generateFilePath($glbFile, $path);
+                    $glbUrl = $this->saveFile($glbFile, $path, $glbErrorMessage);
+
+                    // サムネイル画像の保存
+                    $thumbnailErrorMessage = 'サムネイル画像のアップロードに失敗しました';
+                    $thumbnailStoredFilePath = $this->generateFilePath($thumbnailFile, $path);
+                    $thumbnailUrl = $this->saveFile($thumbnailFile, $path, $thumbnailErrorMessage);
+
+                    return response()->json([
+                        'message' => 'アップロード成功',
+                        'item' => $item
+                    ], 201);
+                } catch (\Exception $e) {
+                    if (isset($item)) {
+                        $item->delete();
+                    }
+
+                    Log::error('ファイルアップロードエラー詳細', [
+                        'error' => $e->getMessage(),
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+
+                    return response()->json([
+                        'message' => 'アップロード失敗',
+                        'error' => $e->getMessage()
+                    ], 500);
+                }
+            }
+
+            Log::error('必要なファイルが見つかりません');
+            return response()->json(['error' => '必要なファイルが見つかりません'], 400);
+        } catch (\Exception $e) {
+            Log::error('バリデーションエラー', [
+                'error' => $e->getMessage(),
+                'request_data' => $request->all()
+            ]);
+            throw $e;
+        }
+    }
+
+    private function removeBackground($imageFile)
+    {
+        try {
+            $client = new Client();
+            $apiKey = env('PHOTOROOM_API_KEY');
+            $endpoint = 'https://sdk.photoroom.com/v1/segment';
+
+            // multipartリクエストの準備
+            $response = $client->post($endpoint, [
+                'headers' => [
+                    'Accept' => 'image/png, application/json',
+                    'x-api-key' => $apiKey
+                ],
+                'multipart' => [
+                    [
+                        'name' => 'image_file',
+                        'contents' => fopen($imageFile->getRealPath(), 'r'),
+                        'filename' => $imageFile->getClientOriginalName()
+                    ]
+                ]
+            ]);
+
+            // 一時ファイルとして保存
+            $tempPath = storage_path('app/temp/' . uniqid() . '.png');
+            if (!file_exists(dirname($tempPath))) {
+                mkdir(dirname($tempPath), 0777, true);
+            }
+
+            file_put_contents($tempPath, $response->getBody());
+
+            // 処理された画像をアップロードファイルとして返す
+            return new \Illuminate\Http\UploadedFile(
+                $tempPath,
+                pathinfo($imageFile->getClientOriginalName(), PATHINFO_FILENAME) . '_removed_bg.png',
+                'image/png',
+                null,
+                true
+            );
+
+        } catch (\Exception $e) {
+            Log::error('背景削除処理エラー', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            throw new \Exception('画像の背景削除処理に失敗しました: ' . $e->getMessage());
+        }
     }
 }
