@@ -143,17 +143,14 @@ class ItemController extends Controller
         try {
             $request->validate([
                 'subscriptionKey' => 'required|string',
+                'taskId' => 'required|string',
             ]);
 
             $client = new Client();
             $rodinApiKey = env('RODIN_API_KEY');
             $statusEndpoint = 'https://hyperhuman.deemos.com/api/v2/status';
 
-            // リクエストの内容をログ出力
-            Log::info('Status check request', [
-                'subscriptionKey' => $request->subscriptionKey
-            ]);
-
+            // ステータスチェック
             $response = $client->post($statusEndpoint, [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $rodinApiKey,
@@ -165,16 +162,66 @@ class ItemController extends Controller
             ]);
 
             $result = json_decode($response->getBody()->getContents(), true);
+            Log::info('Rodin status response', ['response' => $result]);
 
-            // レスポンスの内容をログ出力
-            Log::info('Rodin status response', [
-                'response' => $result
-            ]);
-
-            // jobsの配列から最初のジョブのステータスを取得
             if (isset($result['jobs']) && is_array($result['jobs']) && count($result['jobs']) > 0) {
                 $jobStatus = $result['jobs'][0]['status'] ?? 'Unknown';
                 $jobMessage = $result['jobs'][0]['message'] ?? null;
+
+                // ステータスがDoneの場合、ファイルの存在を確認
+                if ($jobStatus === 'Done') {
+                    try {
+                        // ダウンロードURLを取得
+                        $downloadEndpoint = 'https://hyperhuman.deemos.com/api/v2/download';
+                        $downloadResponse = $client->post($downloadEndpoint, [
+                            'headers' => [
+                                'Authorization' => 'Bearer ' . $rodinApiKey,
+                                'Content-Type' => 'application/json'
+                            ],
+                            'json' => [
+                                'task_uuid' => $request->taskId
+                            ]
+                        ]);
+
+                        $downloadResult = json_decode($downloadResponse->getBody()->getContents(), true);
+
+                        if (isset($downloadResult['list']) && is_array($downloadResult['list'])) {
+                            $glbFiles = [];
+                            foreach ($downloadResult['list'] as $file) {
+                                if (str_ends_with(strtolower($file['name']), '.glb')) {
+                                    // GLBファイルをStorageに保存
+                                    $savedFile = $this->saveGlbToStorage($file['url'], $file['name'], $request->taskId);
+                                    if ($savedFile) {
+                                        $glbFiles[] = $savedFile;
+                                    }
+                                }
+                            }
+
+                            if (!empty($glbFiles)) {
+                                return response()->json([
+                                    'status' => 'Done',
+                                    'message' => 'ファイルの生成が完了しました',
+                                    'downloadUrls' => $glbFiles
+                                ]);
+                            }
+                        }
+
+                        // ファイルが見つからない場合は処理中として扱う
+                        return response()->json([
+                            'status' => 'Processing',
+                            'message' => 'ファイルを生成中です'
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('Download check error', [
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString()
+                        ]);
+                        return response()->json([
+                            'status' => 'Processing',
+                            'message' => 'ファイルの確認中にエラーが発生しました'
+                        ]);
+                    }
+                }
 
                 return response()->json([
                     'status' => $jobStatus,
@@ -807,7 +854,6 @@ class ItemController extends Controller
                         'message' => 'アップロード成功',
                         'item' => $item
                     ], 201);
-
                 } catch (\Exception $e) {
                     if (isset($item)) {
                         $item->delete();
