@@ -39,17 +39,22 @@ class RoomController extends Controller
     public function studio($room_id)
     {
         try {
-            $room = Room::with('items')->find($room_id);
-            if ($room) {
+            $room = Room::where('id', $room_id)
+                ->where('user_id', auth()->id())
+                ->with('items')
+                ->first();
+
+            if (!$room) {
                 return response()->json([
-                    'message' => 'ルーム情報取得成功',
-                    'room' => $room
-                ], 200);
+                    'message' => '指定されたルームが見つかりません',
+                ], 404);
             }
 
             return response()->json([
-                'message' => '指定されたルームが見つかりません',
-            ], 404);
+                'message' => 'ルーム情報取得成功',
+                'room' => $room
+            ], 200);
+
         } catch (\Exception $e) {
             Log::error('ルーム取得エラー', [
                 'error' => $e->getMessage(),
@@ -162,6 +167,17 @@ class RoomController extends Controller
         ]);
 
         try {
+            // ルームの所有者チェック
+            $room = Room::where('id', $room_id)
+                ->where('user_id', auth()->id())
+                ->first();
+
+            if (!$room) {
+                return response()->json([
+                    'message' => '指定されたルームが見つかりません',
+                ], 404);
+            }
+
             $messages = [];
             $itemRooms = [];
 
