@@ -317,8 +317,8 @@ class ItemController extends Controller
 
             // ファイル名の重複を避けるため、タスクIDをプレフィックスとして付与
             $uniqueFilename = "{$taskId}_{$filename}";
-            // 保存先のパスを生成（generated_models直下に保存）
-            $storagePath = "generated_models/{$uniqueFilename}";
+            // 保存先のパスを生成（public/generated_models直下に保存）
+            $storagePath = "public/generated_models/{$uniqueFilename}";
 
             // ストリームとしてファイルを保存
             Storage::put($storagePath, $response->getBody()->getContents());
@@ -345,7 +345,7 @@ class ItemController extends Controller
     public function previewModel($filename)
     {
         try {
-            $path = "generated_models/{$filename}";
+            $path = "public/generated_models/{$filename}";
 
             if (!Storage::exists($path)) {
                 return response()->json([
