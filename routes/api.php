@@ -27,6 +27,7 @@ Route::middleware(['auth_api'])->group(function () {
     Route::post('/item/proxy-download', [ItemController::class, 'proxyDownload'])->name('item.proxyDownload');
     Route::get('/item/preview-model/{filename}', [ItemController::class, 'previewModel'])->name('item.previewModel');
     Route::post('/item/rodin-upload', [ItemController::class, 'rodinStore'])->name('item.rodinStore');
+    Route::post('/item/delete-generated-model', [ItemController::class, 'deleteGeneratedModelApi'])->name('item.deleteGeneratedModelApi');
 
     Route::get('/room/{user_id}', [RoomController::class, 'index'])->name('room.index');
     Route::get('/room/studio/{room_id}', [RoomController::class, 'studio'])->name('room.studio');
