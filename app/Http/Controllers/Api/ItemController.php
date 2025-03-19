@@ -558,17 +558,13 @@ class ItemController extends Controller
                     file_put_contents($tempPath, $response->getBody());
 
                     // 処理済み画像の情報を保存
-                    $processedName = pathinfo($image->getClientOriginalName(), PATHINFO_FILENAME) . '_removed_bg.png';
-                    $finalPath = storage_path('app/temp/' . $processedName);
-                    rename($tempPath, $finalPath);
-
-                    // 配列にファイル名のみを追加
+                    $processedName = basename($tempPath);
                     $processedImages[] = $processedName;
 
                     Log::info('画像処理完了', [
                         'index' => $index + 1,
                         'processed_name' => $processedName,
-                        'path' => $finalPath
+                        'path' => $tempPath
                     ]);
                 } catch (\Exception $e) {
                     Log::error('画像処理エラー', [
