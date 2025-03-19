@@ -30,16 +30,14 @@ class ItemController extends Controller
         try {
             // リクエストの内容をログ出力
             Log::info('Received request', [
-                'has_file' => $request->hasFile('images'),
                 'content_type' => $request->header('Content-Type'),
-                'all_files' => $request->allFiles(),
                 'all_inputs' => $request->all()
             ]);
 
-            // 画像のバリデーション
+            // バリデーション
             $request->validate([
-                'images' => 'required|array|min:1|max:5',
-                'images.*' => 'required|file|image|max:10240', // 各画像10MB制限
+                'filenames' => 'required|array|min:1|max:5',
+                'filenames.*' => 'required|string',
                 'tier' => 'required|string|in:Sketch,Regular'
             ]);
 
@@ -64,28 +62,27 @@ class ItemController extends Controller
                 ]
             ];
 
-            // 画像ファイルの追加
-            foreach ($request->file('images') as $image) {
-                Log::info('Preparing image file', [
-                    'original_name' => $image->getClientOriginalName(),
-                    'mime_type' => $image->getMimeType(),
-                    'size' => $image->getSize()
-                ]);
+            // 指定されたファイル名の画像を追加
+            foreach ($request->filenames as $filename) {
+                $tempPath = storage_path('app/temp/' . $filename);
 
-                // 背景削除処理
-                $processedImage = $this->removeBackground($image);
+                if (!file_exists($tempPath)) {
+                    throw new \Exception("ファイルが見つかりません: {$filename}");
+                }
+
+                Log::info('Adding file to request', [
+                    'filename' => $filename,
+                    'path' => $tempPath
+                ]);
 
                 $multipart[] = [
                     'name' => 'images',
-                    'contents' => fopen($processedImage->getRealPath(), 'r'),
-                    'filename' => $processedImage->getClientOriginalName(),
+                    'contents' => fopen($tempPath, 'r'),
+                    'filename' => $filename,
                     'headers' => [
-                        'Content-Type' => $processedImage->getMimeType()
+                        'Content-Type' => 'image/png'
                     ]
                 ];
-
-                // 一時ファイルを削除
-                unlink($processedImage->getRealPath());
             }
 
             // Rodin APIにリクエスト
@@ -122,13 +119,40 @@ class ItemController extends Controller
                 throw new \Exception('Rodin APIからの予期しない応答形式です');
             }
 
+            // 一時ファイルの削除
+            foreach ($request->filenames as $filename) {
+                $tempPath = storage_path('app/temp/' . $filename);
+                if (file_exists($tempPath)) {
+                    unlink($tempPath);
+                    Log::info('一時ファイルを削除しました', [
+                        'filename' => $filename,
+                        'path' => $tempPath
+                    ]);
+                }
+            }
+
             // subscription_keyとuuidの両方を返す
             return response()->json([
                 'taskId' => $result['uuid'],
                 'subscriptionKey' => $result['jobs']['subscription_key'],
                 'message' => '3Dモデル生成タスクを開始しました'
             ]);
+
         } catch (\Exception $e) {
+            // エラー時も一時ファイルを削除
+            if (isset($request->filenames)) {
+                foreach ($request->filenames as $filename) {
+                    $tempPath = storage_path('app/temp/' . $filename);
+                    if (file_exists($tempPath)) {
+                        unlink($tempPath);
+                        Log::info('エラー発生時の一時ファイル削除', [
+                            'filename' => $filename,
+                            'path' => $tempPath
+                        ]);
+                    }
+                }
+            }
+
             Log::error('Rodin API Error', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
@@ -788,52 +812,103 @@ class ItemController extends Controller
         }
     }
 
-    private function removeBackground($imageFile)
+    /**
+     * 画像の背景を削除するAPI
+     */
+    public function removeBackground(Request $request)
     {
         try {
-            $client = new Client();
-            $apiKey = env('PHOTOROOM_API_KEY');
-            $endpoint = 'https://sdk.photoroom.com/v1/segment';
-
-            // multipartリクエストの準備
-            $response = $client->post($endpoint, [
-                'headers' => [
-                    'Accept' => 'image/png, application/json',
-                    'x-api-key' => $apiKey
-                ],
-                'multipart' => [
-                    [
-                        'name' => 'image_file',
-                        'contents' => fopen($imageFile->getRealPath(), 'r'),
-                        'filename' => $imageFile->getClientOriginalName()
-                    ]
-                ]
+            // バリデーション
+            $request->validate([
+                'images' => 'required|array|min:1|max:5',
+                'images.*' => 'required|file|image|max:10240', // 各画像10MB制限
             ]);
 
-            // 一時ファイルとして保存
-            $tempPath = storage_path('app/temp/' . uniqid() . '.png');
-            if (!file_exists(dirname($tempPath))) {
-                mkdir(dirname($tempPath), 0777, true);
+            $processedImages = [];
+
+            foreach ($request->file('images') as $index => $image) {
+                try {
+                    // 処理状況をログに記録
+                    Log::info('画像処理開始', [
+                        'index' => $index + 1,
+                        'total' => count($request->file('images')),
+                        'original_name' => $image->getClientOriginalName()
+                    ]);
+
+                    // PhotoRoom APIの設定
+                    $client = new Client();
+                    $apiKey = env('PHOTOROOM_API_KEY');
+                    $endpoint = 'https://sdk.photoroom.com/v1/segment';
+
+                    // multipartリクエストの準備
+                    $response = $client->post($endpoint, [
+                        'headers' => [
+                            'Accept' => 'image/png, application/json',
+                            'x-api-key' => $apiKey
+                        ],
+                        'multipart' => [
+                            [
+                                'name' => 'image_file',
+                                'contents' => fopen($image->getRealPath(), 'r'),
+                                'filename' => $image->getClientOriginalName()
+                            ]
+                        ]
+                    ]);
+
+                    // 一時ファイルとして保存
+                    $tempPath = storage_path('app/temp/' . uniqid() . '.png');
+                    if (!file_exists(dirname($tempPath))) {
+                        mkdir(dirname($tempPath), 0777, true);
+                    }
+
+                    file_put_contents($tempPath, $response->getBody());
+
+                    // 処理済み画像の情報を保存
+                    $processedName = pathinfo($image->getClientOriginalName(), PATHINFO_FILENAME) . '_removed_bg.png';
+                    $finalPath = storage_path('app/temp/' . $processedName);
+                    rename($tempPath, $finalPath);
+
+                    // 配列にファイル名のみを追加
+                    $processedImages[] = $processedName;
+
+                    Log::info('画像処理完了', [
+                        'index' => $index + 1,
+                        'processed_name' => $processedName,
+                        'path' => $finalPath
+                    ]);
+
+                } catch (\Exception $e) {
+                    Log::error('画像処理エラー', [
+                        'index' => $index + 1,
+                        'error' => $e->getMessage()
+                    ]);
+
+                    return response()->json([
+                        'error' => '画像処理に失敗しました',
+                        'message' => $e->getMessage(),
+                        'failed_image' => $image->getClientOriginalName(),
+                        'status' => 'remove_error'
+                    ], 500);
+                }
             }
 
-            file_put_contents($tempPath, $response->getBody());
-
-            // 処理された画像をアップロードファイルとして返す
-            return new \Illuminate\Http\UploadedFile(
-                $tempPath,
-                pathinfo($imageFile->getClientOriginalName(), PATHINFO_FILENAME) . '_removed_bg.png',
-                'image/png',
-                null,
-                true
-            );
+            return response()->json([
+                'message' => '背景削除処理が完了しました',
+                'processed_images' => $processedImages,
+                'status' => 'Removed'
+            ]);
 
         } catch (\Exception $e) {
-            Log::error('背景削除処理エラー', [
+            Log::error('背景削除API エラー', [
                 'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
+                'trace' => $e->getTraceAsString()
             ]);
-            throw new \Exception('画像の背景削除処理に失敗しました: ' . $e->getMessage());
+
+            return response()->json([
+                'error' => '背景削除処理に失敗しました',
+                'message' => $e->getMessage(),
+                'status' => 'remove_error'
+            ], 500);
         }
     }
 }
