@@ -137,7 +137,6 @@ class ItemController extends Controller
                 'subscriptionKey' => $result['jobs']['subscription_key'],
                 'message' => '3Dモデル生成タスクを開始しました'
             ]);
-
         } catch (\Exception $e) {
             // エラー時も一時ファイルを削除
             if (isset($request->filenames)) {
@@ -342,6 +341,265 @@ class ItemController extends Controller
             return response()->json([
                 'error' => 'プレビューの取得に失敗しました',
                 'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 生成されたGLBファイルを削除する
+     */
+    private function deleteGeneratedModel($filename)
+    {
+        try {
+            $path = "public/generated_models/{$filename}";
+            if (Storage::exists($path)) {
+                Storage::delete($path);
+                Log::info('Generated model deleted', [
+                    'filename' => $filename,
+                    'path' => $path
+                ]);
+                return true;
+            }
+            return false;
+        } catch (\Exception $e) {
+            Log::error('Failed to delete generated model', [
+                'error' => $e->getMessage(),
+                'filename' => $filename
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * 3Dモデルを保存する
+     */
+    public function rodinStore(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'filename' => 'required|string',
+                'user_id' => 'required|integer',
+                'name' => 'required|string|max:255',
+                'thumbnail' => 'required|image|max:5120',
+            ]);
+
+            if ($request->hasFile('thumbnail')) {
+                try {
+                    // storageからglbファイルを取得
+                    $glbPath = Storage::disk('local')->path('public/generated_models/' . $request->filename);
+
+                    if (!file_exists($glbPath)) {
+                        throw new \Exception('GLBファイルが見つかりません');
+                    }
+
+                    // GLBファイルをアップロード用のファイルオブジェクトとして作成
+                    $glbFile = new \Illuminate\Http\UploadedFile(
+                        $glbPath,
+                        $request->filename,
+                        'application/octet-stream',
+                        null,
+                        true
+                    );
+
+                    $thumbnailFile = $request->file('thumbnail');
+
+                    // GLBファイルの検証
+                    $this->validateGlbFile($glbFile);
+
+                    // GLBファイルのサイズを取得
+                    $fileSize = filesize($glbPath);
+
+                    // データベースにアイテムを保存
+                    $item = Item::create([
+                        'user_id' => $request->user_id,
+                        'name' => $request->name,
+                        'memo' => $request->memo,
+                        'totalsize' => $fileSize,
+                        'thumbnail' => $thumbnailFile->getClientOriginalName(),
+                        'filename' => $request->filename
+                    ]);
+
+                    // S3の保存先ディレクトリ
+                    $s3ItemsRootPath = 'warehouse/';
+                    $path = $s3ItemsRootPath . $request->user_id . '/' . $item->id . '/';
+
+                    // GLBファイルの保存
+                    $glbErrorMessage = 'GLBファイルのアップロードに失敗しました';
+                    $glbStoredFilePath = $this->generateFilePath($glbFile, $path);
+                    $glbUrl = $this->saveFile($glbFile, $path, $glbErrorMessage);
+
+                    // サムネイル画像の保存
+                    $thumbnailErrorMessage = 'サムネイル画像のアップロードに失敗しました';
+                    $thumbnailStoredFilePath = $this->generateFilePath($thumbnailFile, $path);
+                    $thumbnailUrl = $this->saveFile($thumbnailFile, $path, $thumbnailErrorMessage);
+
+                    // Storageに保存されたGLBファイルを削除
+                    $this->deleteGeneratedModel($request->filename);
+
+                    return response()->json([
+                        'message' => 'アップロード成功',
+                        'item' => $item
+                    ], 201);
+                } catch (\Exception $e) {
+                    if (isset($item)) {
+                        $item->delete();
+                    }
+
+                    Log::error('ファイルアップロードエラー詳細', [
+                        'error' => $e->getMessage(),
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+
+                    return response()->json([
+                        'message' => 'アップロード失敗',
+                        'error' => $e->getMessage()
+                    ], 500);
+                }
+            }
+
+            Log::error('必要なファイルが見つかりません');
+            return response()->json(['error' => '必要なファイルが見つかりません'], 400);
+        } catch (\Exception $e) {
+            Log::error('バリデーションエラー', [
+                'error' => $e->getMessage(),
+                'request_data' => $request->all()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * 生成されたGLBファイルを削除するAPI
+     */
+    public function deleteGeneratedModelApi(Request $request)
+    {
+        try {
+            $request->validate([
+                'filename' => 'required|string'
+            ]);
+
+            $result = $this->deleteGeneratedModel($request->filename);
+
+            if ($result) {
+                return response()->json([
+                    'message' => 'GLBファイルを削除しました',
+                    'status' => 'success'
+                ]);
+            } else {
+                return response()->json([
+                    'message' => 'GLBファイルが見つかりませんでした',
+                    'status' => 'not_found'
+                ], 404);
+            }
+        } catch (\Exception $e) {
+            Log::error('GLBファイル削除API エラー', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'GLBファイルの削除に失敗しました',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 画像の背景を削除するAPI
+     */
+    public function removeBackground(Request $request)
+    {
+        try {
+            // バリデーション
+            $request->validate([
+                'images' => 'required|array|min:1|max:5',
+                'images.*' => 'required|file|image|max:10240', // 各画像10MB制限
+            ]);
+
+            $processedImages = [];
+
+            foreach ($request->file('images') as $index => $image) {
+                try {
+                    // 処理状況をログに記録
+                    Log::info('画像処理開始', [
+                        'index' => $index + 1,
+                        'total' => count($request->file('images')),
+                        'original_name' => $image->getClientOriginalName()
+                    ]);
+
+                    // PhotoRoom APIの設定
+                    $client = new Client();
+                    $apiKey = env('PHOTOROOM_API_KEY');
+                    $endpoint = 'https://sdk.photoroom.com/v1/segment';
+
+                    // multipartリクエストの準備
+                    $response = $client->post($endpoint, [
+                        'headers' => [
+                            'Accept' => 'image/png, application/json',
+                            'x-api-key' => $apiKey
+                        ],
+                        'multipart' => [
+                            [
+                                'name' => 'image_file',
+                                'contents' => fopen($image->getRealPath(), 'r'),
+                                'filename' => $image->getClientOriginalName()
+                            ]
+                        ]
+                    ]);
+
+                    // 一時ファイルとして保存
+                    $tempPath = storage_path('app/temp/' . uniqid() . '.png');
+                    if (!file_exists(dirname($tempPath))) {
+                        mkdir(dirname($tempPath), 0777, true);
+                    }
+
+                    file_put_contents($tempPath, $response->getBody());
+
+                    // 処理済み画像の情報を保存
+                    $processedName = pathinfo($image->getClientOriginalName(), PATHINFO_FILENAME) . '_removed_bg.png';
+                    $finalPath = storage_path('app/temp/' . $processedName);
+                    rename($tempPath, $finalPath);
+
+                    // 配列にファイル名のみを追加
+                    $processedImages[] = $processedName;
+
+                    Log::info('画像処理完了', [
+                        'index' => $index + 1,
+                        'processed_name' => $processedName,
+                        'path' => $finalPath
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('画像処理エラー', [
+                        'index' => $index + 1,
+                        'error' => $e->getMessage()
+                    ]);
+
+                    return response()->json([
+                        'error' => '画像処理に失敗しました',
+                        'message' => $e->getMessage(),
+                        'failed_image' => $image->getClientOriginalName(),
+                        'status' => 'remove_error'
+                    ], 500);
+                }
+            }
+
+            return response()->json([
+                'message' => '背景削除処理が完了しました',
+                'processed_images' => $processedImages,
+                'status' => 'Removed'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('背景削除API エラー', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => '背景削除処理に失敗しました',
+                'message' => $e->getMessage(),
+                'status' => 'remove_error'
             ], 500);
         }
     }
@@ -716,199 +974,5 @@ class ItemController extends Controller
         }
 
         return true;
-    }
-
-    public function rodinStore(Request $request)
-    {
-        try {
-            $validated = $request->validate([
-                'filename' => 'required|string',
-                'user_id' => 'required|integer',
-                'name' => 'required|string|max:255',
-                'thumbnail' => 'required|image|max:5120',
-            ]);
-
-            if ($request->hasFile('thumbnail')) {
-                try {
-                    // storageからglbファイルを取得
-                    $glbPath = Storage::disk('local')->path('public/generated_models/' . $request->filename);
-
-                    if (!file_exists($glbPath)) {
-                        throw new \Exception('GLBファイルが見つかりません');
-                    }
-
-                    // GLBファイルをアップロード用のファイルオブジェクトとして作成
-                    $glbFile = new \Illuminate\Http\UploadedFile(
-                        $glbPath,
-                        $request->filename,
-                        'application/octet-stream',
-                        null,
-                        true
-                    );
-
-                    $thumbnailFile = $request->file('thumbnail');
-
-                    // GLBファイルの検証
-                    $this->validateGlbFile($glbFile);
-
-                    // GLBファイルのサイズを取得
-                    $fileSize = filesize($glbPath);
-
-                    // データベースにアイテムを保存
-                    $item = Item::create([
-                        'user_id' => $request->user_id,
-                        'name' => $request->name,
-                        'memo' => $request->memo,
-                        'totalsize' => $fileSize,
-                        'thumbnail' => $thumbnailFile->getClientOriginalName(),
-                        'filename' => $request->filename
-                    ]);
-
-                    // S3の保存先ディレクトリ
-                    $s3ItemsRootPath = 'warehouse/';
-                    $path = $s3ItemsRootPath . $request->user_id . '/' . $item->id . '/';
-
-                    // GLBファイルの保存
-                    $glbErrorMessage = 'GLBファイルのアップロードに失敗しました';
-                    $glbStoredFilePath = $this->generateFilePath($glbFile, $path);
-                    $glbUrl = $this->saveFile($glbFile, $path, $glbErrorMessage);
-
-                    // サムネイル画像の保存
-                    $thumbnailErrorMessage = 'サムネイル画像のアップロードに失敗しました';
-                    $thumbnailStoredFilePath = $this->generateFilePath($thumbnailFile, $path);
-                    $thumbnailUrl = $this->saveFile($thumbnailFile, $path, $thumbnailErrorMessage);
-
-                    return response()->json([
-                        'message' => 'アップロード成功',
-                        'item' => $item
-                    ], 201);
-                } catch (\Exception $e) {
-                    if (isset($item)) {
-                        $item->delete();
-                    }
-
-                    Log::error('ファイルアップロードエラー詳細', [
-                        'error' => $e->getMessage(),
-                        'file' => $e->getFile(),
-                        'line' => $e->getLine(),
-                        'trace' => $e->getTraceAsString()
-                    ]);
-
-                    return response()->json([
-                        'message' => 'アップロード失敗',
-                        'error' => $e->getMessage()
-                    ], 500);
-                }
-            }
-
-            Log::error('必要なファイルが見つかりません');
-            return response()->json(['error' => '必要なファイルが見つかりません'], 400);
-        } catch (\Exception $e) {
-            Log::error('バリデーションエラー', [
-                'error' => $e->getMessage(),
-                'request_data' => $request->all()
-            ]);
-            throw $e;
-        }
-    }
-
-    /**
-     * 画像の背景を削除するAPI
-     */
-    public function removeBackground(Request $request)
-    {
-        try {
-            // バリデーション
-            $request->validate([
-                'images' => 'required|array|min:1|max:5',
-                'images.*' => 'required|file|image|max:10240', // 各画像10MB制限
-            ]);
-
-            $processedImages = [];
-
-            foreach ($request->file('images') as $index => $image) {
-                try {
-                    // 処理状況をログに記録
-                    Log::info('画像処理開始', [
-                        'index' => $index + 1,
-                        'total' => count($request->file('images')),
-                        'original_name' => $image->getClientOriginalName()
-                    ]);
-
-                    // PhotoRoom APIの設定
-                    $client = new Client();
-                    $apiKey = env('PHOTOROOM_API_KEY');
-                    $endpoint = 'https://sdk.photoroom.com/v1/segment';
-
-                    // multipartリクエストの準備
-                    $response = $client->post($endpoint, [
-                        'headers' => [
-                            'Accept' => 'image/png, application/json',
-                            'x-api-key' => $apiKey
-                        ],
-                        'multipart' => [
-                            [
-                                'name' => 'image_file',
-                                'contents' => fopen($image->getRealPath(), 'r'),
-                                'filename' => $image->getClientOriginalName()
-                            ]
-                        ]
-                    ]);
-
-                    // 一時ファイルとして保存
-                    $tempPath = storage_path('app/temp/' . uniqid() . '.png');
-                    if (!file_exists(dirname($tempPath))) {
-                        mkdir(dirname($tempPath), 0777, true);
-                    }
-
-                    file_put_contents($tempPath, $response->getBody());
-
-                    // 処理済み画像の情報を保存
-                    $processedName = pathinfo($image->getClientOriginalName(), PATHINFO_FILENAME) . '_removed_bg.png';
-                    $finalPath = storage_path('app/temp/' . $processedName);
-                    rename($tempPath, $finalPath);
-
-                    // 配列にファイル名のみを追加
-                    $processedImages[] = $processedName;
-
-                    Log::info('画像処理完了', [
-                        'index' => $index + 1,
-                        'processed_name' => $processedName,
-                        'path' => $finalPath
-                    ]);
-
-                } catch (\Exception $e) {
-                    Log::error('画像処理エラー', [
-                        'index' => $index + 1,
-                        'error' => $e->getMessage()
-                    ]);
-
-                    return response()->json([
-                        'error' => '画像処理に失敗しました',
-                        'message' => $e->getMessage(),
-                        'failed_image' => $image->getClientOriginalName(),
-                        'status' => 'remove_error'
-                    ], 500);
-                }
-            }
-
-            return response()->json([
-                'message' => '背景削除処理が完了しました',
-                'processed_images' => $processedImages,
-                'status' => 'Removed'
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('背景削除API エラー', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'error' => '背景削除処理に失敗しました',
-                'message' => $e->getMessage(),
-                'status' => 'remove_error'
-            ], 500);
-        }
     }
 }
