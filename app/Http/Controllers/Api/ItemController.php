@@ -157,8 +157,17 @@ class ItemController extends Controller
                 'trace' => $e->getTraceAsString()
             ]);
 
+            // 画像からオブジェクトが判定不可だった場合、カスタムエラーを返す
+            if ($e->getMessage() === 'No object found on the image. Please check your input and try again.') {
+                return response()->json([
+                    'error' => 'No objects detected in the image',
+                    'message' => $e->getMessage()
+                ], 500);
+            }
+
+            // その他のエラーの場合は通常のエラーメッセージを返す
             return response()->json([
-                'error' => '3Dモデル生成の開始に失敗しました',
+                'error' => 'Failed to start 3D model generation',
                 'message' => $e->getMessage()
             ], 500);
         }
@@ -245,6 +254,7 @@ class ItemController extends Controller
                             'error' => $e->getMessage(),
                             'trace' => $e->getTraceAsString()
                         ]);
+                        // 処理継続中のためレスポンスはエラーにしない
                         return response()->json([
                             'status' => 'Processing',
                             'message' => 'ファイルの確認中にエラーが発生しました'
@@ -269,7 +279,7 @@ class ItemController extends Controller
             ]);
 
             return response()->json([
-                'error' => 'ステータスチェックに失敗しました',
+                'error' => 'Failed to check status',
                 'message' => $e->getMessage()
             ], 500);
         }
@@ -323,7 +333,7 @@ class ItemController extends Controller
 
             if (!Storage::exists($path)) {
                 return response()->json([
-                    'error' => 'ファイルが見つかりません'
+                    'error' => 'File not found'
                 ], 404);
             }
 
@@ -339,7 +349,7 @@ class ItemController extends Controller
             ]);
 
             return response()->json([
-                'error' => 'プレビューの取得に失敗しました',
+                'error' => 'Failed to preview',
                 'message' => $e->getMessage()
             ], 500);
         }
@@ -453,20 +463,24 @@ class ItemController extends Controller
                     ]);
 
                     return response()->json([
-                        'message' => 'アップロード失敗',
+                        'message' => 'Failed to upload 3d model',
                         'error' => $e->getMessage()
                     ], 500);
                 }
             }
 
-            Log::error('必要なファイルが見つかりません');
-            return response()->json(['error' => '必要なファイルが見つかりません'], 400);
+            Log::error('必要なサムネイルファイルが見つかりません');
+            return response()->json(['error' => 'Thumbnail not found'], 400);
         } catch (\Exception $e) {
             Log::error('バリデーションエラー', [
                 'error' => $e->getMessage(),
                 'request_data' => $request->all()
             ]);
-            throw $e;
+
+            return response()->json([
+                'error' => 'Invalid input values',
+                'message' => $e->getMessage()
+            ], 400);
         }
     }
 
@@ -489,8 +503,8 @@ class ItemController extends Controller
                 ]);
             } else {
                 return response()->json([
-                    'message' => 'GLBファイルが見つかりませんでした',
-                    'status' => 'not_found'
+                    'message' => '3D model file not found',
+                    'error' => '3D model file not found'
                 ], 404);
             }
         } catch (\Exception $e) {
@@ -500,7 +514,7 @@ class ItemController extends Controller
             ]);
 
             return response()->json([
-                'error' => 'GLBファイルの削除に失敗しました',
+                'error' => 'Failed to delete 3D model',
                 'message' => $e->getMessage()
             ], 500);
         }
@@ -573,10 +587,9 @@ class ItemController extends Controller
                     ]);
 
                     return response()->json([
-                        'error' => '画像処理に失敗しました',
+                        'error' => 'Failed to remove image background',
                         'message' => $e->getMessage(),
                         'failed_image' => $image->getClientOriginalName(),
-                        'status' => 'remove_error'
                     ], 500);
                 }
             }
@@ -593,7 +606,7 @@ class ItemController extends Controller
             ]);
 
             return response()->json([
-                'error' => '背景削除処理に失敗しました',
+                'error' => 'Failed to remove image background',
                 'message' => $e->getMessage(),
                 'status' => 'remove_error'
             ], 500);
